@@ -21,6 +21,13 @@ func InitDB() *sql.DB {
 		completed BOOLEAN NOT NULL,
 		date DATETIME
 	)`)
+
+	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS users (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		username TEXT NOT NULL UNIQUE,
+		password TEXT NOT NULL
+	)`)
+
 	if err != nil {
 		log.Fatalf("Failed to create table: %v", err)
 	}

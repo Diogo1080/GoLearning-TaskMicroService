@@ -12,8 +12,8 @@ type Redis struct {
 	Client *redis.Client
 }
 
-func NewRedis(addr string) *Redis {
-	addr = os.Getenv("REDIS_ADDR")
+func NewRedis() *Redis {
+	addr := os.Getenv("REDIS_ADDR")
 
 	if addr == "" {
 		addr = "localhost:6379"

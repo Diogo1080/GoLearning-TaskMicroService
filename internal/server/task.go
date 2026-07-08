@@ -1,19 +1,27 @@
 package server
 
 import (
-	"backendGo/internal/service"
+	"backendGo/internal/entities"
+	"net/http"
 
 	"github.com/gin-gonic/gin"
 )
 
-type Handlers struct {
-	TaskService *service.TaskService
-}
+func (h *Handlers) HandleAddTask() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var in entities.TaskDTO
+		if err := c.ShouldBindJSON(&in); err != nil {
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "invalid json"})
+			return
+		}
 
-func NewHandlers(taskService *service.TaskService) *Handlers {
-	return &Handlers{TaskService: taskService}
-}
+		_, exists := c.Get("userID")
+		if exists {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "userID found in context"})
+			return
+		}
 
-func (h *Handlers) HandleAddTask(ctx *gin.Context) {
+		h.TaskService.CreateTask(in)
 
+	}
 }
