@@ -3,7 +3,7 @@ package entities
 import "strings"
 
 type Task struct {
-	ID          int      `json:"id"`
+	ID          int64    `json:"id"`
 	Title       string   `json:"title"`
 	Description string   `json:"description,omitempty"`
 	Priority    int      `json:"priority"`
