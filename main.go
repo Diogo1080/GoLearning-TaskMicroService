@@ -5,7 +5,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"path/filepath"
 
 	"backendGo/internal/service"
 	"backendGo/internal/store"
@@ -44,19 +43,11 @@ func main() {
 	taskService := service.NewTaskService(taskRepo)
 	authService := service.NewAuthService(UserRepo)
 
-	router := routes.RegisterRoutes(taskService, authService, rds)
+	routes.RegisterRoutes(r, taskService, authService, rds)
 
-	fileServer := http.FileServer(http.Dir("./web"))
-	router.GET("/*", func(c *gin.Context) {
-		if filepath.Ext(c.Request.URL.Path) == ".css" {
-			c.Header("Content-Type", "text/css")
-		}
-		fileServer.ServeHTTP(c.Writer, c.Request)
-	})
-
-	address := fmt.Sprintf(":%s", os.Getenv("TODO_PORT"))
+	address := fmt.Sprintf(":%s", os.Getenv("PORT"))
 	log.Printf("Starting server on %s", address)
-	if err := http.ListenAndServe(address, router); err != nil {
+	if err := http.ListenAndServe(address, r); err != nil {
 		log.Fatalf("Failed to start server: %v", err)
 	}
 }

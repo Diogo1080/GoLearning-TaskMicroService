@@ -17,7 +17,11 @@ func NewTaskService(repo *store.SQLiteTaskRepository) *TaskService {
 
 func (s *TaskService) CreateTask(taskDTO entities.TaskDTO) (entities.Task, error) {
 
-	task := taskDTO.ToTask()
+	task, err := taskDTO.ToTask()
+
+	if err != nil {
+		return entities.Task{}, err
+	}
 
 	return s.Repo.CreateTask(task)
 }

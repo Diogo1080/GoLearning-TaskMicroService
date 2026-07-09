@@ -9,45 +9,38 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func (h *Handlers) HandleAddTask(res http.ResponseWriter, req *http.Request) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		var in entities.TaskDTO
-		if err := c.ShouldBindJSON(&in); err != nil {
-			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "invalid json"})
-			return
-		}
-
-		_, exists := c.Get("userID")
-		if exists {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "userID found in context"})
-			return
-		}
-
-		task, err := h.TaskService.CreateTask(in)
-
-		if err != nil {
-			utils.SendErrorResponse(res, "Error:", http.StatusInternalServerError)
-		}
-
-		sendJSONResponse(res, http.StatusOK, models.IDResponse{ID: task.ID})
+func (h *Handlers) HandleAddTask(c *gin.Context) {
+	var in entities.TaskDTO
+	if err := c.ShouldBindJSON(&in); err != nil {
+		utils.SendErrorResponse(c.Writer, "Error: Bad Json data", http.StatusBadRequest)
+		return
 	}
+
+	task, err := h.TaskService.CreateTask(in)
+
+	if err != nil {
+		utils.SendErrorResponse(c.Writer, "Error:"+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	sendJSONResponse(c.Writer, http.StatusOK, models.IDResponse{ID: task.ID})
 }
 
-func (h *Handlers) HandleGetTasks(res http.ResponseWriter, req *http.Request) gin.HandlerFunc {
-	return func(c *gin.Context) {
+func (h *Handlers) HandleGetTasks(c *gin.Context) {
 
-		searchTerm := req.URL.Query().Get("search")
-		limit := 100
+	searchTerm := c.Request.URL.Query().Get("search")
+	limit := 100
 
-		tasks, err := h.TaskService.Repo.GetTasks(searchTerm, limit)
-		if err != nil {
-			utils.SendErrorResponse(res, "Error:", http.StatusInternalServerError)
-		}
-
-		if len(tasks) == 0 {
-			tasks = []entities.Task{}
-		}
-
-		sendJSONResponse(res, http.StatusOK, map[string][]entities.Task{"tasks": tasks})
+	tasks, err := h.TaskService.Repo.GetTasks(searchTerm, limit)
+	if err != nil {
+		utils.SendErrorResponse(c.Writer, "Error: "+err.Error(), http.StatusInternalServerError)
+		return
 	}
+
+	if len(tasks) == 0 {
+		tasks = []entities.Task{}
+	}
+
+	sendJSONResponse(c.Writer, http.StatusOK, map[string][]entities.Task{"tasks": tasks})
+
 }

@@ -16,8 +16,9 @@ func NewSQLiteTaskRepository(db *sql.DB) *SQLiteTaskRepository {
 }
 
 func (r *SQLiteTaskRepository) CreateTask(task entities.Task) (entities.Task, error) {
-	result, err := r.DB.Exec("INSERT INTO tasks (Tittle, Description, Priority, Completed, DueDate, Tags) VALUES (?,?,?,?,?,?)",
-		task.Title, task.Description, task.Priority, task.Completed, task.DueDate, task.Tags)
+	result, err := r.DB.Exec("INSERT INTO tasks (title, description, priority, completed, dueDate) VALUES (?,?,?,?,?)",
+		task.Title, task.Description, task.Priority, task.Completed, task.DueDate)
+
 	if err != nil {
 		return entities.Task{}, err
 	}
@@ -27,21 +28,21 @@ func (r *SQLiteTaskRepository) CreateTask(task entities.Task) (entities.Task, er
 }
 
 func (r *SQLiteTaskRepository) GetTasks(searchTerm string, limit int) ([]entities.Task, error) {
-	query := "SELECT id, date, title, comment, repeat FROM scheduler"
+	query := "SELECT id, DueDate, Title, Description FROM tasks"
 	args := []interface{}{}
 
 	parsedDate, dateErr := time.Parse("02.01.2006", searchTerm)
 	switch {
 	case dateErr == nil:
 		formattedDate := parsedDate.Format("20060102")
-		query += " WHERE date = ? ORDER BY date LIMIT ?"
+		query += " WHERE DueDate = ? ORDER BY date LIMIT ?"
 		args = append(args, formattedDate, limit)
 	case searchTerm != "":
-		query += " WHERE title LIKE ? OR comment LIKE ? ORDER BY date LIMIT ?"
+		query += " WHERE title LIKE ? OR description LIKE ? ORDER BY DueDate LIMIT ?"
 		searchTerm = "%" + searchTerm + "%"
 		args = append(args, searchTerm, searchTerm, limit)
 	default:
-		query += " ORDER BY date LIMIT ?"
+		query += " ORDER BY DueDate LIMIT ?"
 		args = append(args, limit)
 	}
 
@@ -75,7 +76,7 @@ func (r *SQLiteTaskRepository) GetTaskByID(id int) (entities.Task, error) {
 
 	if result.Next() {
 		var task entities.Task
-		err := result.Scan(&task.ID, &task.Title, &task.Description, &task.Priority, &task.DueDate, &task.Tags)
+		err := result.Scan(&task.ID, &task.Title, &task.Description, &task.Priority, &task.DueDate)
 		if err != nil {
 			return entities.Task{}, err
 		}
@@ -124,7 +125,7 @@ func (r *SQLiteTaskRepository) DeleteTask(id string) (int64, error) {
 	return result.RowsAffected()
 }
 
-func (r *SQLiteTaskRepository) MarkTaskAsDone(id, date string) error {
-	_, err := r.DB.Exec("UPDATE scheduler SET date = ? WHERE id = ?", date, id)
+func (r *SQLiteTaskRepository) MarkTaskAsDone(completed bool, id int64) error {
+	_, err := r.DB.Exec("UPDATE tasks SET completed = ? WHERE id = ?", completed, id)
 	return err
 }

@@ -44,6 +44,26 @@ func (r *SQLiteUserRepository) GetUserByUsername(username string) (entities.User
 	return entities.User{}, sql.ErrNoRows
 }
 
+func (r *SQLiteUserRepository) GetUserByID(id int) (entities.User, error) {
+	result, err := r.DB.Query("SELECT id, username, password FROM users WHERE id = ?", id)
+	if err != nil {
+		return entities.User{}, err
+	}
+
+	defer result.Close()
+
+	if result.Next() {
+		var user entities.User
+		err := result.Scan(&user.ID, &user.Username, &user.Password)
+		if err != nil {
+			return entities.User{}, err
+		}
+		return user, nil
+	}
+
+	return entities.User{}, sql.ErrNoRows
+}
+
 func (r *SQLiteUserRepository) UpdateUser(userUpdates map[string]entities.User) (int64, error) {
 	query := "UPDATE users SET "
 	args := []interface{}{}

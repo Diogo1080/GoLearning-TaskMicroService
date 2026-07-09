@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"time"
@@ -27,7 +28,7 @@ type Tokens struct {
 }
 
 func IssueTokens(userId string) (*Tokens, error) {
-	now := time.Now().UTC()
+	now := time.Now()
 
 	t := &Tokens{
 		UserID:   userId,
@@ -58,11 +59,11 @@ func IssueTokens(userId string) (*Tokens, error) {
 	})
 
 	var err error
-	t.Access, err = acc.SignedString([]byte("ACCESS_SECRET"))
+	t.Access, err = acc.SignedString([]byte(os.Getenv("ACCESS_SECRET")))
 	if err != nil {
 		return nil, err
 	}
-	t.Refresh, err = ref.SignedString([]byte("REFRESH_SECRET"))
+	t.Refresh, err = ref.SignedString([]byte(os.Getenv("REFRESH_SECRET")))
 	if err != nil {
 		return nil, err
 	}
@@ -109,23 +110,25 @@ func parseWithSecret(tokenStr, secret string) (*jwt.RegisteredClaims, error) {
 
 	parser := jwt.NewParser(
 		jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}),
-		jwt.WithAudience("jwt-todo-client"),
-		jwt.WithIssuer("jwt-todo-app"),
+		jwt.WithAudience("jwt-todo-client"), // Must match JWT creation
+		jwt.WithIssuer("jwt-todo-app"),      // Must match JWT creation
+		jwt.WithLeeway(30*time.Second),      // Tolerance for clock skew
 	)
 
 	token, err := parser.ParseWithClaims(tokenStr, &jwt.RegisteredClaims{}, func(t *jwt.Token) (interface{}, error) {
-		// Extra safety: ensure HMAC family
 		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, errors.New("unexpected signing method")
 		}
 		return []byte(secret), nil
 	})
 	if err != nil {
+		fmt.Printf("JWT parse error: %v", err) // See exact error!
 		return nil, err
 	}
 
 	claims, ok := token.Claims.(*jwt.RegisteredClaims)
 	if !ok || !token.Valid {
+		fmt.Printf("Token invalid: typeAssertion=%v, valid=%v", ok, token.Valid)
 		return nil, errors.New("invalid token")
 	}
 

@@ -5,6 +5,8 @@ import (
 	"log"
 
 	"backendGo/config"
+
+	_ "github.com/mattn/go-sqlite3"
 )
 
 func InitDB() *sql.DB {
@@ -12,14 +14,15 @@ func InitDB() *sql.DB {
 	if err != nil {
 		log.Fatalf("Failed to open database: %v", err)
 	}
+	_, err = db.Exec(`DROP TABLE IF EXISTS tasks`)
 
-	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS scheduler (
+	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS tasks (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		title TEXT NOT NULL,
 		description TEXT,
 		priority INTEGER NOT NULL,
 		completed BOOLEAN NOT NULL,
-		date DATETIME
+		dueDate DATETIME
 	)`)
 
 	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS users (
@@ -30,11 +33,6 @@ func InitDB() *sql.DB {
 
 	if err != nil {
 		log.Fatalf("Failed to create table: %v", err)
-	}
-
-	_, err = db.Exec(`CREATE INDEX IF NOT EXISTS idx_scheduler_date ON scheduler (date)`)
-	if err != nil {
-		log.Fatalf("Failed to create index: %v", err)
 	}
 
 	return db

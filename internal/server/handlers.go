@@ -2,6 +2,7 @@ package server
 
 import (
 	"backendGo/internal/service"
+	"backendGo/internal/store"
 	"backendGo/utils"
 	"encoding/json"
 	"net/http"
@@ -10,10 +11,11 @@ import (
 type Handlers struct {
 	AuthService *service.AuthService
 	TaskService *service.TaskService
+	rds         *store.Redis
 }
 
-func NewHandlers(taskService *service.TaskService, authService *service.AuthService) *Handlers {
-	return &Handlers{TaskService: taskService, AuthService: authService}
+func NewHandlers(taskService *service.TaskService, authService *service.AuthService, rds *store.Redis) *Handlers {
+	return &Handlers{TaskService: taskService, AuthService: authService, rds: rds}
 }
 
 func sendJSONResponse(res http.ResponseWriter, statusCode int, data interface{}) {

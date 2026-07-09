@@ -9,12 +9,16 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func RegisterRoutes(taskService *service.TaskService, authService *service.AuthService, rds *store.Redis) *gin.Engine {
-	r := gin.Default()
+func RegisterRoutes(r *gin.Engine, taskService *service.TaskService, authService *service.AuthService, rds *store.Redis) *gin.Engine {
+	h := handlers.NewHandlers(taskService, authService, rds)
 
-	h := handlers.NewHandlers(taskService, authService)
+	public := r.Group("/api")
+	public.POST("/login", h.HandleLogin)
+	public.POST("/register", h.HandleCreateUser)
 
-	r.POST("/api/login", h.HandleLogin(rds))
-	r.POST("/api/task", middleware.AuthMiddleware(rds), h.HandleAddTask())
+	protected := r.Group("/api")
+	protected.Use(middleware.AuthMiddleware(rds))
+	protected.POST("/task", h.HandleAddTask)
+	protected.GET("/task", h.HandleGetTasks)
 	return r
 }

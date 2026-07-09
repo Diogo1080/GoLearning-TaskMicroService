@@ -26,6 +26,7 @@ func AuthMiddleware(r *store.Redis) gin.HandlerFunc {
 		if tokenStr == "" {
 			tokenStr = bearerFromHeader(c)
 		}
+
 		if tokenStr == "" {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "missing token"})
 			return
@@ -33,7 +34,7 @@ func AuthMiddleware(r *store.Redis) gin.HandlerFunc {
 
 		claims, err := auth.ParseAccess(tokenStr)
 		if err != nil {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid token"})
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid token: " + err.Error()})
 			return
 		}
 
