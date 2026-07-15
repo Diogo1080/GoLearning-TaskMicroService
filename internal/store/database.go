@@ -14,7 +14,6 @@ func InitDB() *sql.DB {
 	if err != nil {
 		log.Fatalf("Failed to open database: %v", err)
 	}
-	_, err = db.Exec(`DROP TABLE IF EXISTS tasks`)
 
 	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS tasks (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -6,14 +6,26 @@ type User struct {
 	Password string `json:"password"`
 }
 
-type UserDTO struct {
+type CreateAndLoginUserDTO struct {
 	Username string `form:"username" json:"username"`
 	Password string `form:"password" json:"password"`
 }
 
-func (u *UserDTO) ToUser() User {
+type UserDTO struct {
+	ID       int    `form:"id" json:"id"`
+	Username string `form:"username" json:"username"`
+}
+
+func (u *CreateAndLoginUserDTO) ToUser() User {
 	return User{
 		Username: u.Username,
 		Password: u.Password,
+	}
+}
+
+func (u *User) ToUserDTO() UserDTO {
+	return UserDTO{
+		ID:       int(u.ID),
+		Username: u.Username,
 	}
 }

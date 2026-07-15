@@ -3,7 +3,6 @@ package store
 import (
 	"backendGo/internal/entities"
 	"database/sql"
-	"fmt"
 	"time"
 )
 
@@ -15,32 +14,32 @@ func NewSQLiteTaskRepository(db *sql.DB) *SQLiteTaskRepository {
 	return &SQLiteTaskRepository{DB: db}
 }
 
-func (r *SQLiteTaskRepository) CreateTask(task entities.Task) (entities.Task, error) {
+func (r *SQLiteTaskRepository) CreateTask(task entities.Task) (entities.TaskDTO, error) {
 	result, err := r.DB.Exec("INSERT INTO tasks (title, description, priority, completed, dueDate) VALUES (?,?,?,?,?)",
 		task.Title, task.Description, task.Priority, task.Completed, task.DueDate)
 
 	if err != nil {
-		return entities.Task{}, err
+		return entities.TaskDTO{}, err
 	}
 
 	task.ID, _ = result.LastInsertId()
-	return task, nil
+	return task.ToTaskDTO()
 }
 
-func (r *SQLiteTaskRepository) GetTasks(searchTerm string, limit int) ([]entities.Task, error) {
-	query := "SELECT id, DueDate, Title, Description FROM tasks"
+func (r *SQLiteTaskRepository) GetTasks(terms entities.TaskSearch, limit int) ([]entities.Task, error) {
+	query := "SELECT * FROM tasks"
 	args := []interface{}{}
 
-	parsedDate, dateErr := time.Parse("02.01.2006", searchTerm)
+	parsedDate, dateErr := time.Parse("02.01.2006", terms.Search)
 	switch {
 	case dateErr == nil:
 		formattedDate := parsedDate.Format("20060102")
 		query += " WHERE DueDate = ? ORDER BY date LIMIT ?"
 		args = append(args, formattedDate, limit)
-	case searchTerm != "":
+	case terms.Search != "":
 		query += " WHERE title LIKE ? OR description LIKE ? ORDER BY DueDate LIMIT ?"
-		searchTerm = "%" + searchTerm + "%"
-		args = append(args, searchTerm, searchTerm, limit)
+		terms.Search = "%" + terms.Search + "%"
+		args = append(args, terms.Search, terms.Search, limit)
 	default:
 		query += " ORDER BY DueDate LIMIT ?"
 		args = append(args, limit)
@@ -55,7 +54,7 @@ func (r *SQLiteTaskRepository) GetTasks(searchTerm string, limit int) ([]entitie
 	var tasks []entities.Task
 	for rows.Next() {
 		var task entities.Task
-		err = rows.Scan(&task.ID, &task.DueDate, &task.Title, &task.Description)
+		err = rows.Scan(&task.ID, &task.Title, &task.Description, &task.Priority, &task.Completed, &task.DueDate)
 		if err != nil {
 			return nil, err
 		}
@@ -65,58 +64,41 @@ func (r *SQLiteTaskRepository) GetTasks(searchTerm string, limit int) ([]entitie
 	return tasks, nil
 }
 
-func (r *SQLiteTaskRepository) GetTaskByID(id int) (entities.Task, error) {
+func (r *SQLiteTaskRepository) GetTaskByID(id int) (entities.TaskDTO, error) {
 	result, err := r.DB.Query("SELECT * FROM tasks WHERE ID = ?", id)
 
 	if err != nil {
-		return entities.Task{}, err
+		return entities.TaskDTO{}, err
 	}
 
 	defer result.Close()
 
 	if result.Next() {
 		var task entities.Task
-		err := result.Scan(&task.ID, &task.Title, &task.Description, &task.Priority, &task.DueDate)
+		err := result.Scan(&task.ID, &task.Title, &task.Description, &task.Priority, &task.Completed, &task.DueDate)
 		if err != nil {
-			return entities.Task{}, err
+			return entities.TaskDTO{}, err
 		}
-		return task, nil
+		return task.ToTaskDTO()
 	}
 
-	return entities.Task{}, nil
+	return entities.TaskDTO{}, nil
 }
 
-func (r *SQLiteTaskRepository) UpdateTask(taskUpdates map[string]entities.Task) (int64, error) {
-	query := "UPDATE users SET "
-	args := []interface{}{}
-	i := 0
+func (r *SQLiteTaskRepository) UpdateTask(taskUpdates entities.Task, id int) (entities.TaskDTO, error) {
+	result, err := r.DB.Exec("UPDATE tasks SET title = ?, description = ?, Priority = ?, DueDate = ? WHERE id = ?",
+		taskUpdates.Title, taskUpdates.Description, taskUpdates.Priority, taskUpdates.DueDate, id)
 
-	//Loop through all of the changes and add them to the querry
-	for key, value := range taskUpdates {
-		if key != "id" {
-			if i > 0 {
-				query += ", "
-			}
-			query += fmt.Sprintf("%s = ?", key)
-			args = append(args, value)
-			i++
-		}
-	}
-
-	//Add the Where statement
-	query += " WHERE id = ?"
-	args = append(args, taskUpdates["ID"])
-
-	//Execute
-	result, err := r.DB.Exec(query, args...)
 	if err != nil {
-		return 0, err
+		return entities.TaskDTO{}, err
 	}
 
-	return result.RowsAffected()
+	_, err = result.RowsAffected()
+
+	return r.GetTaskByID(id)
 }
 
-func (r *SQLiteTaskRepository) DeleteTask(id string) (int64, error) {
+func (r *SQLiteTaskRepository) DeleteTask(id int) (int64, error) {
 	result, err := r.DB.Exec("DELETE FROM tasks WHERE id = ?", id)
 	if err != nil {
 		return 0, err
@@ -125,7 +107,11 @@ func (r *SQLiteTaskRepository) DeleteTask(id string) (int64, error) {
 	return result.RowsAffected()
 }
 
-func (r *SQLiteTaskRepository) MarkTaskAsDone(completed bool, id int64) error {
-	_, err := r.DB.Exec("UPDATE tasks SET completed = ? WHERE id = ?", completed, id)
-	return err
+func (r *SQLiteTaskRepository) MarkTaskAsDone(id int) (int64, error) {
+	result, err := r.DB.Exec("UPDATE tasks SET completed = ? WHERE id = ?", true, id)
+	if err != nil {
+		return 0, err
+	}
+
+	return result.RowsAffected()
 }

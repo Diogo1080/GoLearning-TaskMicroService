@@ -3,7 +3,6 @@ package store
 import (
 	"backendGo/internal/entities"
 	"database/sql"
-	"fmt"
 )
 
 type SQLiteUserRepository struct {
@@ -64,34 +63,27 @@ func (r *SQLiteUserRepository) GetUserByID(id int) (entities.User, error) {
 	return entities.User{}, sql.ErrNoRows
 }
 
-func (r *SQLiteUserRepository) UpdateUser(userUpdates map[string]entities.User) (int64, error) {
-	query := "UPDATE users SET "
-	args := []interface{}{}
-	i := 0
+func (r *SQLiteUserRepository) UpdateUser(user entities.User, id int) (entities.UserDTO, error) {
+	result, err := r.DB.Exec("UPDATE users SET password = ? WHERE id = ?",
+		user.Password, id)
 
-	//Loop through all of the changes and add them to the querry
-	for key, value := range userUpdates {
-		if key != "id" {
-			if i > 0 {
-				query += ", "
-			}
-			query += fmt.Sprintf("%s = ?", key)
-			args = append(args, value)
-			i++
-		}
-	}
-
-	//Add the Where statement
-	query += " WHERE id = ?"
-	args = append(args, userUpdates["ID"])
-
-	//Execute
-	result, err := r.DB.Exec(query, args...)
 	if err != nil {
-		return 0, err
+		return entities.UserDTO{}, err
 	}
 
-	return result.RowsAffected()
+	i, err := result.LastInsertId()
+
+	if err != nil {
+		return entities.UserDTO{}, err
+	}
+
+	user, err = r.GetUserByID(int(i))
+
+	if err != nil {
+		return entities.UserDTO{}, err
+	}
+
+	return user.ToUserDTO(), nil
 }
 
 func (r *SQLiteUserRepository) DeleteUser(id int) (int64, error) {

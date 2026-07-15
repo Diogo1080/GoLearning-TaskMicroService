@@ -18,7 +18,16 @@ func RegisterRoutes(r *gin.Engine, taskService *service.TaskService, authService
 
 	protected := r.Group("/api")
 	protected.Use(middleware.AuthMiddleware(rds))
+	protected.GET("/user/id/:id", h.HandleGetUserByID)
+	protected.GET("/user/name/:username", h.HandleGetUserByUsername)
+	protected.PATCH("/user/passwordChange", h.HandlePasswordChange)
+
 	protected.POST("/task", h.HandleAddTask)
 	protected.GET("/task", h.HandleGetTasks)
+	protected.GET("/task/:id", h.HandleGetTaskById)
+	protected.PUT("/task/:id", h.HandleUpdateTask)
+	protected.DELETE("/task/:id", h.HandleDeleteTask)
+	protected.PATCH("/task/complete/:id", h.HandleCompleteTask)
+
 	return r
 }
