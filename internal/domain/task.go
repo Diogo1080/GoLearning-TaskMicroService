@@ -1,4 +1,4 @@
-package entities
+package domain
 
 import (
 	"fmt"
@@ -8,9 +8,9 @@ import (
 type TaskSearch struct {
 	Search     string
 	Priority   string
-	Completed  bool
-	DueDateMin time.Time
-	DueDateMax time.Time
+	Completed  string
+	DueDateMin string
+	DueDateMax string
 }
 
 type Task struct {
@@ -19,7 +19,7 @@ type Task struct {
 	Description string    `json:"description,omitempty"`
 	Priority    int       `json:"priority"`
 	Completed   bool      `json:"completed"`
-	DueDate     time.Time `json:"due_date,omitempty"`
+	DueDate     time.Time `json:"due_date"`
 }
 
 type TaskDTO struct {
@@ -29,6 +29,10 @@ type TaskDTO struct {
 	Priority    string `form:"priority" json:"priority"`
 	Completed   bool   `form:"completed" json:"completed"`
 	DueDate     string `form:"due_date" json:"due_date,omitempty"`
+}
+
+func (t *TaskSearch) Sanatise() error {
+	return nil
 }
 
 func (t *TaskDTO) ToTask() (Task, error) {
@@ -46,20 +50,15 @@ func (t *TaskDTO) ToTask() (Task, error) {
 	}, nil
 }
 
-func (t *Task) ToTaskDTO() (TaskDTO, error) {
-	priority, err := parsePriorityString(t.Priority)
-	if err != nil {
-		return TaskDTO{}, err
-	}
-
+func (t *Task) ToTaskDTO() TaskDTO {
 	return TaskDTO{
 		ID:          int(t.ID),
 		Title:       t.Title,
 		Description: t.Description,
-		Priority:    priority,
+		Priority:    parsePriorityString(t.Priority),
 		Completed:   t.Completed,
 		DueDate:     parseDateString(t.DueDate),
-	}, nil
+	}
 }
 
 func parsePriorityInt(priority string) int {
@@ -70,22 +69,20 @@ func parsePriorityInt(priority string) int {
 		return 2
 	case "high", "3":
 		return 3
-	default:
-		return 2
 	}
+	return 0
 }
 
-func parsePriorityString(priority int) (string, error) {
+func parsePriorityString(priority int) string {
 	switch priority {
 	case 1:
-		return "low", nil
+		return "low"
 	case 2:
-		return "medium", nil
+		return "medium"
 	case 3:
-		return "high", nil
-	default:
-		return "", fmt.Errorf("No valid priority")
+		return "high"
 	}
+	return ""
 }
 
 func parseCompleted(completed string) bool {
@@ -113,5 +110,5 @@ func parseDateTime(dateStr string) (time.Time, error) {
 }
 
 func parseDateString(date time.Time) string {
-	return date.Format("2006-01-02")
+	return date.String()
 }

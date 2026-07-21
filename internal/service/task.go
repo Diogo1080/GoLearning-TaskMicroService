@@ -1,43 +1,123 @@
 package service
 
 import (
-	"backendGo/internal/entities"
-	"backendGo/internal/store"
+	entities "backendGo/internal/domain"
+	"fmt"
 )
 
-const Format = "2006-01-02"
+/*
+	type TaskCreator interface {
+		CreateTask(task entities.Task) (entities.Task, error)
+	}
+
+	type TaskReader interface {
+		GetTasks(terms entities.TaskSearch, limit int) ([]entities.Task, error)
+		GetTaskByID(id int) (entities.Task, error)
+	}
+
+	type TaskWriter interface {
+		UpdateTask(task entities.Task, id int) (entities.Task, error)
+		DeleteTask(id int) (int64, error)
+		MarkTaskAsDone(id int) (int64, error)
+	}
+*/
+type TaskRepository interface {
+	CreateTask(task entities.Task) (entities.Task, error)
+	GetTasks(terms entities.TaskSearch, limit int) ([]entities.Task, error)
+	GetTaskByID(id int) (entities.Task, error)
+	UpdateTask(task entities.Task, id int) (entities.Task, error)
+	DeleteTask(id int) (int64, error)
+	MarkTaskAsDone(id int) (int64, error)
+}
 
 type TaskService struct {
-	Repo *store.SQLiteTaskRepository
+	repo TaskRepository
 }
 
-func NewTaskService(repo *store.SQLiteTaskRepository) *TaskService {
-	return &TaskService{Repo: repo}
+func NewTaskService(repo TaskRepository) *TaskService {
+	// Validation
+	if repo == nil {
+		return nil // or panic, depending on policy
+	}
+
+	// Setup
+	svc := &TaskService{repo: repo}
+
+	return svc
 }
 
-func (s *TaskService) CreateTask(taskDTO entities.TaskDTO) (entities.TaskDTO, error) {
-
-	task, err := taskDTO.ToTask()
+func (s *TaskService) CreateTask(task entities.Task) (entities.Task, error) {
+	created, err := s.repo.CreateTask(task)
 
 	if err != nil {
-		return entities.TaskDTO{}, err
+		return entities.Task{}, err
 	}
 
-	return s.Repo.CreateTask(task)
+	return created, nil
 }
 
-func (s *TaskService) UpdateTask(taskDto entities.TaskDTO, id int) (entities.TaskDTO, error) {
-	newTask, err := taskDto.ToTask()
+func (s *TaskService) GetTasks(taskTerms entities.TaskSearch, limit int) ([]entities.Task, error) {
+	empty := make([]entities.Task, 0)
 
+	//Sanatise the
+	err := taskTerms.Sanatise()
 	if err != nil {
-		return entities.TaskDTO{}, err
+		return empty, entities.ErrBadData
 	}
 
-	taskDTO, err := s.Repo.UpdateTask(newTask, id)
+	tasks, err := s.repo.GetTasks(taskTerms, limit)
 
 	if err != nil {
-		return entities.TaskDTO{}, err
+		return empty, err
 	}
 
-	return taskDTO, nil
+	return tasks, nil
+}
+
+func (s *TaskService) GetTaskByID(id int) (entities.Task, error) {
+	task, err := s.repo.GetTaskByID(id)
+
+	if err != nil {
+		return entities.Task{}, err
+	}
+
+	if task.ID == 0 {
+		return entities.Task{}, entities.ErrNotFound
+	}
+
+	return task, nil
+}
+
+func (s *TaskService) UpdateTask(task entities.Task, id int) (entities.Task, error) {
+	task, err := s.repo.UpdateTask(task, id)
+
+	fmt.Print(task.Completed)
+
+	if err != nil {
+		return entities.Task{}, err
+	}
+
+	task.ID = int64(id)
+
+	return task, nil
+}
+
+func (s *TaskService) DeleteTask(id int) error {
+	_, err := s.repo.DeleteTask(id)
+
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (s *TaskService) MarkTaskAsDone(id int) error {
+	_, err := s.repo.MarkTaskAsDone(id)
+
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

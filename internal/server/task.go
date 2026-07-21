@@ -1,114 +1,156 @@
 package server
 
 import (
-	"backendGo/internal/entities"
+	entities "backendGo/internal/domain"
 	"backendGo/utils"
+	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
 )
 
-func (h *Handlers) HandleAddTask(c *gin.Context) {
-	var in entities.TaskDTO
-	if err := c.ShouldBindJSON(&in); err != nil {
-		utils.SendErrorResponse(c.Writer, "Bad Json data", http.StatusBadRequest)
-		return
-	}
-
-	task, err := h.TaskService.CreateTask(in)
-
-	if err != nil {
-		utils.SendErrorResponse(c.Writer, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	sendJSONResponse(c.Writer, http.StatusOK, task)
+type TaskServicePort interface {
+	CreateTask(task entities.Task) (entities.Task, error)
+	GetTasks(terms entities.TaskSearch, limit int) ([]entities.Task, error)
+	GetTaskByID(id int) (entities.Task, error)
+	UpdateTask(task entities.Task, id int) (entities.Task, error)
+	DeleteTask(id int) error
+	MarkTaskAsDone(id int) error
 }
 
-func (h *Handlers) HandleGetTasks(c *gin.Context) {
+type TaskHandler struct {
+	svc TaskServicePort // ← interface, not concrete type
+}
 
+func NewTaskHandler(svc TaskServicePort) *TaskHandler {
+	return &TaskHandler{svc: svc}
+}
+
+func (h *TaskHandler) HandleAddTask(c *gin.Context) {
+	var in entities.Task
+	if err := c.ShouldBindJSON(&in); err != nil {
+		c.JSON(http.StatusBadRequest, entities.ErrBadData)
+		return
+	}
+
+	task, err := h.svc.CreateTask(in)
+	if err != nil {
+		c.JSON(http.StatusFailedDependency, err.Error())
+		return
+	}
+
+	c.JSON(http.StatusCreated, task.ToTaskDTO())
+}
+
+func (h *TaskHandler) HandleGetTasks(c *gin.Context) {
 	terms := entities.TaskSearch{
 		Search:     c.Request.URL.Query().Get("search"),
 		Priority:   c.Request.URL.Query().Get("priority"),
 		Completed:  c.Request.URL.Query().Get("completed"),
-		DueDateMin: c.Request.URL.Query().Get("minDate"),
-		DueDateMax: c.Request.URL.Query().Get("maxDate"),
+		DueDateMin: c.Request.URL.Query().Get("dueDataMin"),
+		DueDateMax: c.Request.URL.Query().Get("dueDataMax"),
 	}
+
 	limit := 100
 
-	tasks, err := h.TaskService.Repo.GetTasks(terms, limit)
+	tasks, err := h.svc.GetTasks(terms, limit)
+
 	if err != nil {
-		utils.SendErrorResponse(c.Writer, err.Error(), http.StatusInternalServerError)
+		if errors.Is(err, entities.ErrBadData) {
+			c.JSON(http.StatusBadRequest, err)
+			return
+		}
+
+		c.JSON(http.StatusInternalServerError, err)
 		return
 	}
 
 	if len(tasks) == 0 {
 		tasks = []entities.Task{}
+		c.JSON(http.StatusOK, tasks)
+		return
 	}
 
-	sendJSONResponse(c.Writer, http.StatusOK, map[string][]entities.Task{"tasks": tasks})
-
+	c.JSON(http.StatusFound, tasks)
 }
 
-func (h *Handlers) HandleGetTaskById(c *gin.Context) {
+func (h *TaskHandler) HandleGetTaskById(c *gin.Context) {
 	id := c.Param("id")
 
 	if len(id) == 0 {
-		utils.SendErrorResponse(c.Writer, "Id is not set", http.StatusBadRequest)
+		c.JSON(http.StatusBadRequest, entities.ErrBadData)
 		return
 	}
 
 	i, _ := strconv.Atoi(id)
 
-	userDTO, err := h.TaskService.Repo.GetTaskByID(i)
-
+	task, err := h.svc.GetTaskByID(i)
 	if err != nil {
-		utils.SendErrorResponse(c.Writer, err.Error(), http.StatusNotFound)
+		if errors.Is(err, entities.ErrNotFound) {
+			c.JSON(http.StatusNotFound, err)
+			return
+		}
+		c.JSON(http.StatusInternalServerError, err)
 		return
 	}
 
-	if !(len(userDTO.Title) > 0) {
-		utils.SendErrorResponse(c.Writer, "No id match", http.StatusInternalServerError)
-		return
-	}
-
-	sendJSONResponse(c.Writer, http.StatusOK, userDTO)
+	c.JSON(http.StatusFound, task.ToTaskDTO())
 }
 
-func (h *Handlers) HandleUpdateTask(c *gin.Context) {
-	var in entities.TaskDTO
+func (h *TaskHandler) HandleUpdateTask(c *gin.Context) {
+	var in entities.Task
 	id := c.Param("id")
 
 	if len(id) == 0 {
-		utils.SendErrorResponse(c.Writer, "Id is not set", http.StatusBadRequest)
+		c.JSON(http.StatusBadRequest, entities.ErrBadData)
 		return
 	}
 
 	if err := c.ShouldBindJSON(&in); err != nil {
-		utils.SendErrorResponse(c.Writer, err.Error(), http.StatusBadRequest)
+		c.JSON(http.StatusBadRequest, entities.ErrBadData)
 		return
 	}
 
+	fmt.Print(in)
 	idint, err := strconv.Atoi(id)
 
 	if err != nil {
-		utils.SendErrorResponse(c.Writer, err.Error(), http.StatusBadRequest)
+		c.JSON(http.StatusBadRequest, entities.ErrBadData)
 		return
 	}
 
-	taskDTO, err := h.TaskService.UpdateTask(in, idint)
+	task, err := h.svc.UpdateTask(in, idint)
 
 	if err != nil {
-		utils.SendErrorResponse(c.Writer, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	sendJSONResponse(c.Writer, http.StatusOK, taskDTO)
-
+	c.JSON(http.StatusOK, task.ToTaskDTO())
 }
 
-func (h *Handlers) HandleDeleteTask(c *gin.Context) {
+func (h *TaskHandler) HandleDeleteTask(c *gin.Context) {
+	id := c.Param("id")
+
+	if len(id) == 0 {
+		c.JSON(http.StatusBadRequest, entities.ErrBadData)
+		return
+	}
+
+	i, _ := strconv.Atoi(id)
+
+	err := h.svc.DeleteTask(i)
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, nil)
+}
+
+func (h *TaskHandler) HandleCompleteTask(c *gin.Context) {
 	id := c.Param("id")
 
 	if len(id) == 0 {
@@ -118,32 +160,12 @@ func (h *Handlers) HandleDeleteTask(c *gin.Context) {
 
 	i, _ := strconv.Atoi(id)
 
-	numberRows, err := h.TaskService.Repo.DeleteTask(i)
+	err := h.svc.MarkTaskAsDone(i)
 
 	if err != nil {
-		utils.SendErrorResponse(c.Writer, err.Error(), http.StatusBadRequest)
+		c.JSON(http.StatusInternalServerError, err)
 		return
 	}
 
-	sendJSONResponse(c.Writer, http.StatusOK, numberRows)
-}
-
-func (h *Handlers) HandleCompleteTask(c *gin.Context) {
-	id := c.Param("id")
-
-	if len(id) == 0 {
-		utils.SendErrorResponse(c.Writer, "Id is not set", http.StatusBadRequest)
-		return
-	}
-
-	i, _ := strconv.Atoi(id)
-
-	numberRows, err := h.TaskService.Repo.MarkTaskAsDone(i)
-
-	if err != nil {
-		utils.SendErrorResponse(c.Writer, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	sendJSONResponse(c.Writer, http.StatusOK, numberRows)
+	c.JSON(http.StatusOK, nil)
 }

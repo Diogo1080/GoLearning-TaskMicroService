@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 
+	"backendGo/internal/server"
 	"backendGo/internal/service"
 	"backendGo/internal/store"
 	"backendGo/routes"
@@ -38,12 +39,14 @@ func main() {
 	}))
 
 	taskRepo := store.NewSQLiteTaskRepository(db)
-	UserRepo := store.NewSQLiteUserRepository(db)
+	userRepo := store.NewSQLiteUserRepository(db)
+	authRepo := store.NewSQLiteAuthRepository(db)
 
-	taskService := service.NewTaskService(taskRepo)
-	authService := service.NewAuthService(UserRepo)
+	taskHandler := server.NewTaskHandler(service.NewTaskService(taskRepo))
+	userHandler := server.NewUserHandler(service.NewUserService(userRepo))
+	authHandler := server.NewAuthHandler(service.NewAuthService(authRepo), rds)
 
-	routes.RegisterRoutes(r, taskService, authService, rds)
+	routes.RegisterRoutes(r, taskHandler, userHandler, authHandler, rds)
 
 	address := fmt.Sprintf(":%s", os.Getenv("PORT"))
 	log.Printf("Starting server on %s", address)

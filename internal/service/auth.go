@@ -1,21 +1,35 @@
 package service
 
 import (
-	"backendGo/internal/entities"
-	"backendGo/internal/store"
+	entities "backendGo/internal/domain"
 	"fmt"
+
+	"golang.org/x/crypto/bcrypt"
 )
 
+type AuthReader interface {
+	GetUserByUsername(id string) (entities.User, error)
+}
+
 type AuthService struct {
-	Repo *store.SQLiteUserRepository
+	repo AuthReader
 }
 
-func NewAuthService(repo *store.SQLiteUserRepository) *AuthService {
-	return &AuthService{Repo: repo}
+func NewAuthService(repo AuthReader) *AuthService {
+	// Validation
+	if repo == nil {
+		return nil // or panic, depending on policy
+	}
+
+	// Setup
+	svc := &AuthService{repo: repo}
+
+	return svc
 }
 
-func (a *AuthService) AuthenticateUser(userDto entities.CreateAndLoginUserDTO) (entities.UserDTO, error) {
-	user, err := a.Repo.GetUserByUsername(userDto.Username)
+func (a *AuthService) AuthenticateUser(userDto entities.User) (entities.UserDTO, error) {
+	user, err := a.repo.GetUserByUsername(userDto.Username)
+
 	if err != nil {
 		return entities.UserDTO{}, err
 	}
@@ -33,40 +47,13 @@ func (a *AuthService) AuthenticateUser(userDto entities.CreateAndLoginUserDTO) (
 	return user.ToUserDTO(), nil
 }
 
-func (a *AuthService) CreateNewUser(userDto entities.CreateAndLoginUserDTO) (entities.UserDTO, error) {
-	var user entities.User
-
-	//Check if already exists
-	user, err := a.Repo.GetUserByUsername(userDto.Username)
-
-	if err == nil {
-		return entities.UserDTO{}, fmt.Errorf("Already exists")
-	}
-
-	user = userDto.ToUser()
-
-	user.Password, err = HashPassword(user.Password)
-
-	if err != nil {
-		return entities.UserDTO{}, err
-	}
-
-	user, err = a.Repo.CreateUser(user)
-	if err != nil {
-		return entities.UserDTO{}, err
-	}
-
-	return user.ToUserDTO(), nil
+func HashPassword(password string) (string, error) {
+	bytes, err := bcrypt.GenerateFromPassword([]byte(password), 14)
+	return string(bytes), err
 }
 
-func (a *AuthService) UpdateUser(userDTO entities.CreateAndLoginUserDTO, id int) (entities.UserDTO, error) {
-	newUser := userDTO.ToUser()
-
-	user, err := a.Repo.UpdateUser(newUser, id)
-
-	if err != nil {
-		return entities.UserDTO{}, err
-	}
-
-	return user, nil
+// VerifyPassword verifies if the given password matches the stored hash.
+func VerifyPassword(password, hash string) bool {
+	err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
+	return err == nil
 }

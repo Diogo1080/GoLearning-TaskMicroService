@@ -1,7 +1,7 @@
 package store
 
 import (
-	"backendGo/internal/entities"
+	entities "backendGo/internal/domain"
 	"database/sql"
 	"time"
 )
@@ -14,16 +14,16 @@ func NewSQLiteTaskRepository(db *sql.DB) *SQLiteTaskRepository {
 	return &SQLiteTaskRepository{DB: db}
 }
 
-func (r *SQLiteTaskRepository) CreateTask(task entities.Task) (entities.TaskDTO, error) {
+func (r *SQLiteTaskRepository) CreateTask(task entities.Task) (entities.Task, error) {
 	result, err := r.DB.Exec("INSERT INTO tasks (title, description, priority, completed, dueDate) VALUES (?,?,?,?,?)",
 		task.Title, task.Description, task.Priority, task.Completed, task.DueDate)
 
 	if err != nil {
-		return entities.TaskDTO{}, err
+		return entities.Task{}, err
 	}
 
 	task.ID, _ = result.LastInsertId()
-	return task.ToTaskDTO()
+	return task, nil
 }
 
 func (r *SQLiteTaskRepository) GetTasks(terms entities.TaskSearch, limit int) ([]entities.Task, error) {
@@ -64,11 +64,11 @@ func (r *SQLiteTaskRepository) GetTasks(terms entities.TaskSearch, limit int) ([
 	return tasks, nil
 }
 
-func (r *SQLiteTaskRepository) GetTaskByID(id int) (entities.TaskDTO, error) {
+func (r *SQLiteTaskRepository) GetTaskByID(id int) (entities.Task, error) {
 	result, err := r.DB.Query("SELECT * FROM tasks WHERE ID = ?", id)
 
 	if err != nil {
-		return entities.TaskDTO{}, err
+		return entities.Task{}, err
 	}
 
 	defer result.Close()
@@ -77,29 +77,30 @@ func (r *SQLiteTaskRepository) GetTaskByID(id int) (entities.TaskDTO, error) {
 		var task entities.Task
 		err := result.Scan(&task.ID, &task.Title, &task.Description, &task.Priority, &task.Completed, &task.DueDate)
 		if err != nil {
-			return entities.TaskDTO{}, err
+			return entities.Task{}, err
 		}
-		return task.ToTaskDTO()
+		return task, nil
 	}
 
-	return entities.TaskDTO{}, nil
+	return entities.Task{}, entities.ErrNotFound
 }
 
-func (r *SQLiteTaskRepository) UpdateTask(taskUpdates entities.Task, id int) (entities.TaskDTO, error) {
+func (r *SQLiteTaskRepository) UpdateTask(taskUpdates entities.Task, id int) (entities.Task, error) {
 	result, err := r.DB.Exec("UPDATE tasks SET title = ?, description = ?, Priority = ?, DueDate = ? WHERE id = ?",
 		taskUpdates.Title, taskUpdates.Description, taskUpdates.Priority, taskUpdates.DueDate, id)
 
 	if err != nil {
-		return entities.TaskDTO{}, err
+		return entities.Task{}, err
 	}
 
 	_, err = result.RowsAffected()
 
-	return r.GetTaskByID(id)
+	return taskUpdates, nil
 }
 
 func (r *SQLiteTaskRepository) DeleteTask(id int) (int64, error) {
 	result, err := r.DB.Exec("DELETE FROM tasks WHERE id = ?", id)
+
 	if err != nil {
 		return 0, err
 	}
