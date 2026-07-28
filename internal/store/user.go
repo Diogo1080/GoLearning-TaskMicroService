@@ -66,21 +66,17 @@ func (r *SQLiteUserRepository) GetUserByID(id int) (entities.User, error) {
 func (r *SQLiteUserRepository) UpdateUser(user entities.User, id int) (entities.User, error) {
 	result, err := r.DB.Exec("UPDATE users SET password = ? WHERE id = ?",
 		user.Password, id)
-
 	if err != nil {
 		return entities.User{}, err
 	}
 
-	i, err := result.LastInsertId()
-
+	rowsAffected, err := result.RowsAffected()
 	if err != nil {
 		return entities.User{}, err
 	}
 
-	user, err = r.GetUserByID(int(i))
-
-	if err != nil {
-		return entities.User{}, err
+	if rowsAffected == 0 {
+		return entities.User{}, entities.ErrNotFound
 	}
 
 	return user, nil
@@ -88,7 +84,7 @@ func (r *SQLiteUserRepository) UpdateUser(user entities.User, id int) (entities.
 
 func (r *SQLiteUserRepository) DeleteUser(id int) error {
 
-	_, err := r.DB.Exec("DELETE users WHERE id:?", id)
+	_, err := r.DB.Exec("DELETE FROM users WHERE id:?", id)
 
 	if err != nil {
 		return err

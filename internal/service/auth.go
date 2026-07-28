@@ -27,20 +27,20 @@ func NewAuthService(repo AuthReader) *AuthService {
 	return svc
 }
 
-func (a *AuthService) AuthenticateUser(userDto entities.User) (entities.UserDTO, error) {
-	user, err := a.repo.GetUserByUsername(userDto.Username)
+func (a *AuthService) AuthenticateUser(user entities.User) (entities.UserDTO, error) {
+	user, err := a.repo.GetUserByUsername(user.Username)
 
 	if err != nil {
 		return entities.UserDTO{}, err
 	}
 
-	userDto.Password, err = HashPassword(user.Password)
+	user.Password, err = HashPassword(user.Password)
 
 	if err != nil {
 		return entities.UserDTO{}, err
 	}
 
-	if VerifyPassword(userDto.Password, user.Password) {
+	if !VerifyPassword(user.Password, user.Password) {
 		return entities.UserDTO{}, fmt.Errorf("invalid credentials")
 	}
 

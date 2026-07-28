@@ -31,7 +31,7 @@ func NewUserService(repo UserRepository) *UserService {
 func (a *UserService) CreateUser(user entities.User) (entities.UserDTO, error) {
 
 	//Check if already exists
-	user, err := a.repo.GetUserByUsername(user.Username)
+	_, err := a.repo.GetUserByUsername(user.Username)
 
 	if err == nil {
 		return entities.UserDTO{}, entities.ErrAlreadyExists

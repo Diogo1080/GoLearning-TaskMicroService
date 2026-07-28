@@ -112,12 +112,12 @@ func (s *TaskService) DeleteTask(id int) error {
 	return nil
 }
 
-func (s *TaskService) MarkTaskAsDone(id int) error {
-	_, err := s.repo.MarkTaskAsDone(id)
+func (s *TaskService) MarkTaskAsDone(id int) (int, error) {
+	rows, err := s.repo.MarkTaskAsDone(id)
 
 	if err != nil {
-		return err
+		return 0, err
 	}
 
-	return nil
+	return int(rows), nil
 }

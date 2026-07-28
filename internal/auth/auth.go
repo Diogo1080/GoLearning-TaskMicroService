@@ -121,6 +121,7 @@ func parseWithSecret(tokenStr, secret string) (*jwt.RegisteredClaims, error) {
 		}
 		return []byte(secret), nil
 	})
+
 	if err != nil {
 		fmt.Printf("JWT parse error: %v", err) // See exact error!
 		return nil, err

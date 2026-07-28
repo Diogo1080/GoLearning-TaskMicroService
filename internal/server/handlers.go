@@ -2,9 +2,7 @@ package server
 
 import (
 	"backendGo/internal/store"
-	"backendGo/utils"
-	"encoding/json"
-	"net/http"
+	"regexp"
 )
 
 type Handlers struct {
@@ -18,19 +16,11 @@ func NewHandlers(taskHandler *TaskHandler, userHandler *UserHandler, authHandler
 	return &Handlers{TaskHandler: taskHandler, UserHandler: userHandler, AuthHandler: authHandler, rds: rds}
 }
 
-func sendJSONResponse(res http.ResponseWriter, statusCode int, data interface{}) {
-	respBytes, err := json.Marshal(data)
-	if err != nil {
-		utils.SendErrorResponse(res, "Error:", http.StatusInternalServerError)
-		return
+func checkId(id string) bool {
+	if len(id) == 0 || !regexp.MustCompile(`^[0-9]+$`).MatchString(id) {
+		return true
 	}
 
-	res.Header().Set("Content-Type", "application/json")
-	res.WriteHeader(statusCode)
-	_, err = res.Write(respBytes)
+	return false
 
-	if err != nil {
-		utils.SendErrorResponse(res, "Error writing", http.StatusInternalServerError)
-		return
-	}
 }

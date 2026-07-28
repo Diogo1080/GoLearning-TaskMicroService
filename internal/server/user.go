@@ -2,7 +2,6 @@ package server
 
 import (
 	entities "backendGo/internal/domain"
-	"backendGo/utils"
 	"errors"
 
 	"net/http"
@@ -37,7 +36,7 @@ func (h *UserHandler) HandleCreateUser(c *gin.Context) {
 	user, err := h.svc.CreateUser(in)
 
 	if err != nil {
-		c.JSON(http.StatusFailedDependency, err)
+		c.JSON(http.StatusInternalServerError, err)
 		return
 	}
 
@@ -69,20 +68,21 @@ func (h *UserHandler) HandleGetUserByUsername(c *gin.Context) {
 func (h *UserHandler) HandleGetUserByID(c *gin.Context) {
 	id := c.Param("id")
 
-	if len(id) == 0 {
-		utils.SendErrorResponse(c.Writer, "Id is not set", http.StatusBadRequest)
+	if checkId(id) {
+		c.JSON(http.StatusBadRequest, entities.ErrBadData)
 		return
 	}
+
 	i, _ := strconv.Atoi(id)
 
 	user, err := h.svc.GetUserByID(i)
 
 	if err != nil {
-		utils.SendErrorResponse(c.Writer, err.Error(), http.StatusInternalServerError)
+		c.JSON(http.StatusInternalServerError, err)
 		return
 	}
 
-	sendJSONResponse(c.Writer, http.StatusOK, user)
+	c.JSON(http.StatusFound, user)
 }
 
 func (h *UserHandler) HandlePasswordChange(c *gin.Context) {
@@ -90,33 +90,48 @@ func (h *UserHandler) HandlePasswordChange(c *gin.Context) {
 	id := c.Param("id")
 
 	if err := c.ShouldBindJSON(&in); err != nil {
-		utils.SendErrorResponse(c.Writer, err.Error(), http.StatusBadRequest)
+		c.JSON(http.StatusBadRequest, entities.ErrBadData)
 		return
 	}
 
 	idint, err := strconv.Atoi(id)
 
 	if err != nil {
-		utils.SendErrorResponse(c.Writer, err.Error(), http.StatusBadRequest)
+		c.JSON(http.StatusBadRequest, entities.ErrBadData)
 		return
 	}
 
 	user, err := h.svc.UpdateUser(in, idint)
 
 	if err != nil {
-		utils.SendErrorResponse(c.Writer, err.Error(), http.StatusInternalServerError)
+		c.JSON(http.StatusInternalServerError, err)
 		return
 	}
 
-	sendJSONResponse(c.Writer, http.StatusOK, user)
+	c.JSON(http.StatusOK, user)
 }
 
-func (h *UserHandler) HandleDeleteUser(id int) error {
-	err := h.svc.DeleteUser(id)
+func (h *UserHandler) HandleDeleteUser(c *gin.Context) {
+	id := c.Param("id")
 
-	if err != nil {
-		return err
+	if checkId(id) {
+		c.JSON(http.StatusBadRequest, entities.ErrBadData)
+		return
 	}
 
-	return nil
+	idint, err := strconv.Atoi(id)
+
+	if err != nil {
+		c.JSON(http.StatusBadRequest, entities.ErrBadData)
+		return
+	}
+
+	err = h.svc.DeleteUser(idint)
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, nil)
 }

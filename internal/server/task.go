@@ -2,7 +2,6 @@ package server
 
 import (
 	entities "backendGo/internal/domain"
-	"backendGo/utils"
 	"errors"
 	"fmt"
 	"net/http"
@@ -17,7 +16,7 @@ type TaskServicePort interface {
 	GetTaskByID(id int) (entities.Task, error)
 	UpdateTask(task entities.Task, id int) (entities.Task, error)
 	DeleteTask(id int) error
-	MarkTaskAsDone(id int) error
+	MarkTaskAsDone(id int) (int, error)
 }
 
 type TaskHandler struct {
@@ -37,7 +36,7 @@ func (h *TaskHandler) HandleAddTask(c *gin.Context) {
 
 	task, err := h.svc.CreateTask(in)
 	if err != nil {
-		c.JSON(http.StatusFailedDependency, err.Error())
+		c.JSON(http.StatusInternalServerError, err.Error())
 		return
 	}
 
@@ -79,7 +78,7 @@ func (h *TaskHandler) HandleGetTasks(c *gin.Context) {
 func (h *TaskHandler) HandleGetTaskById(c *gin.Context) {
 	id := c.Param("id")
 
-	if len(id) == 0 {
+	if checkId(id) {
 		c.JSON(http.StatusBadRequest, entities.ErrBadData)
 		return
 	}
@@ -103,7 +102,7 @@ func (h *TaskHandler) HandleUpdateTask(c *gin.Context) {
 	var in entities.Task
 	id := c.Param("id")
 
-	if len(id) == 0 {
+	if checkId(id) {
 		c.JSON(http.StatusBadRequest, entities.ErrBadData)
 		return
 	}
@@ -133,7 +132,7 @@ func (h *TaskHandler) HandleUpdateTask(c *gin.Context) {
 func (h *TaskHandler) HandleDeleteTask(c *gin.Context) {
 	id := c.Param("id")
 
-	if len(id) == 0 {
+	if checkId(id) {
 		c.JSON(http.StatusBadRequest, entities.ErrBadData)
 		return
 	}
@@ -143,6 +142,10 @@ func (h *TaskHandler) HandleDeleteTask(c *gin.Context) {
 	err := h.svc.DeleteTask(i)
 
 	if err != nil {
+		if errors.Is(err, entities.ErrNotFound) {
+			c.JSON(http.StatusNotFound, err)
+			return
+		}
 		c.JSON(http.StatusInternalServerError, err)
 		return
 	}
@@ -153,19 +156,19 @@ func (h *TaskHandler) HandleDeleteTask(c *gin.Context) {
 func (h *TaskHandler) HandleCompleteTask(c *gin.Context) {
 	id := c.Param("id")
 
-	if len(id) == 0 {
-		utils.SendErrorResponse(c.Writer, "Id is not set", http.StatusBadRequest)
+	if checkId(id) {
+		c.JSON(http.StatusBadRequest, entities.ErrBadData)
 		return
 	}
 
 	i, _ := strconv.Atoi(id)
 
-	err := h.svc.MarkTaskAsDone(i)
+	rows, err := h.svc.MarkTaskAsDone(i)
 
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, err)
 		return
 	}
 
-	c.JSON(http.StatusOK, nil)
+	c.JSON(http.StatusOK, rows)
 }
