@@ -56,6 +56,7 @@ func (h *UserHandler) HandleGetUserByUsername(c *gin.Context) {
 	if err != nil {
 		if errors.Is(err, entities.ErrNotFound) {
 			c.JSON(http.StatusNotFound, err)
+			return
 		}
 
 		c.JSON(http.StatusFailedDependency, err)
