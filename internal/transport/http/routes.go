@@ -1,15 +1,14 @@
-package routes
+package http
 
 import (
-	"backendGo/internal/middleware"
-	handlers "backendGo/internal/server"
 	"backendGo/internal/store"
+	"backendGo/internal/transport/http/middleware"
 
 	"github.com/gin-gonic/gin"
 )
 
-func RegisterRoutes(r *gin.Engine, taskHandler *handlers.TaskHandler, userHandler *handlers.UserHandler, authHandler *handlers.AuthHandler, rds *store.Redis) *gin.Engine {
-	h := handlers.NewHandlers(taskHandler, userHandler, authHandler, rds)
+func RegisterRoutes(r *gin.Engine, taskHandler *TaskHandler, userHandler *UserHandler, authHandler *AuthHandler, rds *store.Redis) *gin.Engine {
+	h := NewHandlers(taskHandler, userHandler, authHandler, rds)
 
 	public := r.Group("/api")
 	public.POST("/login", h.AuthHandler.HandleLogin)
@@ -19,7 +18,7 @@ func RegisterRoutes(r *gin.Engine, taskHandler *handlers.TaskHandler, userHandle
 	protected.Use(middleware.AuthMiddleware(rds))
 	protected.GET("/user/id/:id", h.UserHandler.HandleGetUserByID)
 	protected.GET("/user/name/:username", h.UserHandler.HandleGetUserByUsername)
-	protected.PATCH("/user/passwordChange", h.UserHandler.HandlePasswordChange)
+	protected.PATCH("/user/passwordChange/:id", h.UserHandler.HandlePasswordChange)
 
 	protected.POST("/task", h.TaskHandler.HandleAddTask)
 	protected.GET("/task", h.TaskHandler.HandleGetTasks)

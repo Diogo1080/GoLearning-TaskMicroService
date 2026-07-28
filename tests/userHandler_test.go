@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	entities "backendGo/internal/domain"
-	"backendGo/internal/server"
+	server "backendGo/internal/transport/http"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"

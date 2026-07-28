@@ -40,7 +40,7 @@ func (r *SQLiteUserRepository) GetUserByUsername(username string) (entities.User
 		return user, nil
 	}
 
-	return entities.User{}, sql.ErrNoRows
+	return entities.User{}, entities.ErrNotFound
 }
 
 func (r *SQLiteUserRepository) GetUserByID(id int) (entities.User, error) {
@@ -60,7 +60,7 @@ func (r *SQLiteUserRepository) GetUserByID(id int) (entities.User, error) {
 		return user, nil
 	}
 
-	return entities.User{}, sql.ErrNoRows
+	return entities.User{}, entities.ErrNotFound
 }
 
 func (r *SQLiteUserRepository) UpdateUser(user entities.User, id int) (entities.User, error) {

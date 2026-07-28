@@ -1,4 +1,4 @@
-package server
+package http
 
 import (
 	"backendGo/internal/auth"
