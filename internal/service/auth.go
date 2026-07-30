@@ -28,27 +28,22 @@ func NewAuthService(repo AuthReader) *AuthService {
 }
 
 func (a *AuthService) AuthenticateUser(user entities.User) (entities.UserDTO, error) {
-	user, err := a.repo.GetUserByUsername(user.Username)
+	existing, err := a.repo.GetUserByUsername(user.Username)
 
 	if err != nil {
 		return entities.UserDTO{}, err
 	}
 
-	user.Password, err = HashPassword(user.Password)
-
-	if err != nil {
-		return entities.UserDTO{}, err
+	if !VerifyPassword(user.Password, existing.Password) {
+		return entities.UserDTO{}, entities.ErrUnauthorized
 	}
 
-	if !VerifyPassword(user.Password, user.Password) {
-		return entities.UserDTO{}, fmt.Errorf("invalid credentials")
-	}
-
-	return user.ToUserDTO(), nil
+	return existing.ToUserDTO(), nil
 }
 
 func HashPassword(password string) (string, error) {
 	bytes, err := bcrypt.GenerateFromPassword([]byte(password), 14)
+	fmt.Print(len(bytes))
 	return string(bytes), err
 }
 

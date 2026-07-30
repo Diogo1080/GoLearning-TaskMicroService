@@ -3,7 +3,6 @@ package http
 import (
 	entities "backendGo/internal/domain"
 	"errors"
-
 	"net/http"
 	"strconv"
 
@@ -19,7 +18,7 @@ type UserServicePort interface {
 }
 
 type UserHandler struct {
-	svc UserServicePort // ← interface, not concrete type
+	svc UserServicePort
 }
 
 func NewUserHandler(svc UserServicePort) *UserHandler {
@@ -34,9 +33,12 @@ func (h *UserHandler) HandleCreateUser(c *gin.Context) {
 	}
 
 	user, err := h.svc.CreateUser(in)
-
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, err)
+		if errors.Is(err, entities.ErrAlreadyExists) {
+			c.JSON(http.StatusConflict, entities.ErrAlreadyExists)
+			return
+		}
+		c.JSON(http.StatusInternalServerError, entities.ErrDatabaseFailed)
 		return
 	}
 
@@ -44,22 +46,30 @@ func (h *UserHandler) HandleCreateUser(c *gin.Context) {
 }
 
 func (h *UserHandler) HandleGetUserByUsername(c *gin.Context) {
-	username := c.Param("username")
+	authID, ok := getAuthenticatedUserID(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, entities.ErrUnauthorized)
+		return
+	}
 
+	username := c.Param("username")
 	if len(username) == 0 {
 		c.JSON(http.StatusBadRequest, entities.ErrBadData)
 		return
 	}
 
 	user, err := h.svc.GetUserByUsername(username)
-
 	if err != nil {
 		if errors.Is(err, entities.ErrNotFound) {
-			c.JSON(http.StatusNotFound, err)
+			c.JSON(http.StatusNotFound, entities.ErrNotFound)
 			return
 		}
+		c.JSON(http.StatusInternalServerError, entities.ErrDatabaseFailed)
+		return
+	}
 
-		c.JSON(http.StatusFailedDependency, err)
+	if user.ID != authID {
+		c.JSON(http.StatusForbidden, entities.ErrUnauthorized)
 		return
 	}
 
@@ -67,6 +77,12 @@ func (h *UserHandler) HandleGetUserByUsername(c *gin.Context) {
 }
 
 func (h *UserHandler) HandleGetUserByID(c *gin.Context) {
+	authID, ok := getAuthenticatedUserID(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, entities.ErrUnauthorized)
+		return
+	}
+
 	id := c.Param("id")
 
 	if checkId(id) {
@@ -76,10 +92,14 @@ func (h *UserHandler) HandleGetUserByID(c *gin.Context) {
 
 	i, _ := strconv.Atoi(id)
 
-	user, err := h.svc.GetUserByID(i)
+	if i != authID {
+		c.JSON(http.StatusForbidden, entities.ErrUnauthorized)
+		return
+	}
 
+	user, err := h.svc.GetUserByID(i)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, err)
+		c.JSON(http.StatusInternalServerError, entities.ErrDatabaseFailed)
 		return
 	}
 
@@ -87,6 +107,12 @@ func (h *UserHandler) HandleGetUserByID(c *gin.Context) {
 }
 
 func (h *UserHandler) HandlePasswordChange(c *gin.Context) {
+	authID, ok := getAuthenticatedUserID(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, entities.ErrUnauthorized)
+		return
+	}
+
 	var in entities.User
 	id := c.Param("id")
 
@@ -96,16 +122,19 @@ func (h *UserHandler) HandlePasswordChange(c *gin.Context) {
 	}
 
 	idint, err := strconv.Atoi(id)
-
 	if err != nil {
 		c.JSON(http.StatusBadRequest, entities.ErrBadData)
 		return
 	}
 
-	user, err := h.svc.UpdateUser(in, idint)
+	if idint != authID {
+		c.JSON(http.StatusForbidden, entities.ErrUnauthorized)
+		return
+	}
 
+	user, err := h.svc.UpdateUser(in, idint)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, err)
+		c.JSON(http.StatusInternalServerError, entities.ErrDatabaseFailed)
 		return
 	}
 
@@ -113,6 +142,12 @@ func (h *UserHandler) HandlePasswordChange(c *gin.Context) {
 }
 
 func (h *UserHandler) HandleDeleteUser(c *gin.Context) {
+	authID, ok := getAuthenticatedUserID(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, entities.ErrUnauthorized)
+		return
+	}
+
 	id := c.Param("id")
 
 	if checkId(id) {
@@ -121,16 +156,18 @@ func (h *UserHandler) HandleDeleteUser(c *gin.Context) {
 	}
 
 	idint, err := strconv.Atoi(id)
-
 	if err != nil {
 		c.JSON(http.StatusBadRequest, entities.ErrBadData)
 		return
 	}
 
-	err = h.svc.DeleteUser(idint)
+	if idint != authID {
+		c.JSON(http.StatusForbidden, entities.ErrUnauthorized)
+		return
+	}
 
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, err)
+	if err := h.svc.DeleteUser(idint); err != nil {
+		c.JSON(http.StatusInternalServerError, entities.ErrDatabaseFailed)
 		return
 	}
 

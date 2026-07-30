@@ -30,15 +30,15 @@ func (m *MockTaskService) CreateTask(task entities.Task) (entities.Task, error) 
 	return args.Get(0).(entities.Task), args.Error(1)
 }
 
-func (m *MockTaskService) GetTasks(terms entities.TaskSearch, limit int) ([]entities.Task, error) {
-	args := m.Called(terms, limit)
+func (m *MockTaskService) GetTasks(terms entities.TaskSearch) ([]entities.Task, error) {
+	args := m.Called(terms)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
 	return args.Get(0).([]entities.Task), args.Error(1)
 }
 
-func (m *MockTaskService) GetTaskByID(id int) (entities.Task, error) {
+func (m *MockTaskService) GetTaskByID(id int, userID int) (entities.Task, error) {
 	args := m.Called(id)
 	if args.Get(0) == nil {
 		return entities.Task{}, args.Error(1)
@@ -46,7 +46,7 @@ func (m *MockTaskService) GetTaskByID(id int) (entities.Task, error) {
 	return args.Get(0).(entities.Task), args.Error(1)
 }
 
-func (m *MockTaskService) UpdateTask(task entities.Task, id int) (entities.Task, error) {
+func (m *MockTaskService) UpdateTask(task entities.Task, id int, userID int) (entities.Task, error) {
 	args := m.Called(task, id)
 	if args.Get(0) == nil {
 		return entities.Task{}, args.Error(1)
@@ -54,12 +54,12 @@ func (m *MockTaskService) UpdateTask(task entities.Task, id int) (entities.Task,
 	return args.Get(0).(entities.Task), args.Error(1)
 }
 
-func (m *MockTaskService) DeleteTask(id int) error {
+func (m *MockTaskService) DeleteTask(id int, userID int) error {
 	args := m.Called(id)
 	return args.Error(1)
 }
 
-func (m *MockTaskService) MarkTaskAsDone(id int) (int, error) {
+func (m *MockTaskService) MarkTaskAsDone(id int, userID int) (int, error) {
 	args := m.Called(id)
 	return args.Get(0).(int), args.Error(1)
 }
@@ -81,6 +81,7 @@ func TestTaskHandler_CreateTask(t *testing.T) {
 			name: "creates task successfully",
 			requestBody: map[string]interface{}{
 				"title":       "New Task",
+				"userID":      1,
 				"description": "Task description",
 				"completed":   false,
 			},
@@ -88,6 +89,7 @@ func TestTaskHandler_CreateTask(t *testing.T) {
 				svc.On("CreateTask", mock.AnythingOfType("domain.Task")).
 					Return(entities.Task{
 						ID:          1,
+						UserID:      1,
 						Title:       "New Task",
 						Description: "Task description",
 						Completed:   false,

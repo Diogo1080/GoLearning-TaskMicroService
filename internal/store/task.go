@@ -3,7 +3,7 @@ package store
 import (
 	entities "backendGo/internal/domain"
 	"database/sql"
-	"time"
+	"fmt"
 )
 
 type SQLiteTaskRepository struct {
@@ -15,8 +15,8 @@ func NewSQLiteTaskRepository(db *sql.DB) *SQLiteTaskRepository {
 }
 
 func (r *SQLiteTaskRepository) CreateTask(task entities.Task) (entities.Task, error) {
-	result, err := r.DB.Exec("INSERT INTO tasks (title, description, priority, completed, dueDate) VALUES (?,?,?,?,?)",
-		task.Title, task.Description, task.Priority, task.Completed, task.DueDate)
+	result, err := r.DB.Exec("INSERT INTO tasks (user_id, title, description, priority, completed, dueDate) VALUES (?,?,?,?,?,?)",
+		task.UserID, task.Title, task.Description, task.Priority, task.Completed, task.DueDate)
 
 	if err != nil {
 		return entities.Task{}, err
@@ -26,25 +26,49 @@ func (r *SQLiteTaskRepository) CreateTask(task entities.Task) (entities.Task, er
 	return task, nil
 }
 
-func (r *SQLiteTaskRepository) GetTasks(terms entities.TaskSearch, limit int) ([]entities.Task, error) {
-	query := "SELECT * FROM tasks"
+func (r *SQLiteTaskRepository) GetTasks(terms entities.TaskSearch) ([]entities.Task, error) {
+	query := "SELECT * FROM tasks "
 	args := []interface{}{}
 
-	parsedDate, dateErr := time.Parse("02.01.2006", terms.Search)
-	switch {
-	case dateErr == nil:
-		formattedDate := parsedDate.Format("20060102")
-		query += " WHERE DueDate = ? ORDER BY date LIMIT ?"
-		args = append(args, formattedDate, limit)
-	case terms.Search != "":
-		query += " WHERE title LIKE ? OR description LIKE ? ORDER BY DueDate LIMIT ?"
-		terms.Search = "%" + terms.Search + "%"
-		args = append(args, terms.Search, terms.Search, limit)
-	default:
-		query += " ORDER BY DueDate LIMIT ?"
-		args = append(args, limit)
+	query += "WHERE user_id = ? "
+	args = append(args, terms.UserID)
+
+	if terms.Search != "" {
+		query += "AND (title LIKE ? OR description LIKE ?) "
+		args = append(args, "%"+terms.Search+"%", "%"+terms.Search+"%")
 	}
 
+	if terms.Priority != "" {
+		query += "AND priority = ? "
+		args = append(args, terms.Priority)
+	}
+
+	if terms.Completed != "" {
+		query += "AND completed = ? "
+		args = append(args, terms.Completed)
+	}
+
+	if terms.DueDateMax != "" {
+		query += "AND dueDate < ? "
+		args = append(args, terms.DueDateMax)
+	}
+
+	if terms.DueDateMin != "" {
+		query += "AND dueDate > ? "
+		args = append(args, terms.DueDateMin)
+	}
+
+	if terms.OrderBy != "" {
+		query += "ORDER BY ? "
+		args = append(args, terms.OrderBy)
+	} else {
+		query += "ORDER BY dueDate "
+	}
+
+	query += "Limit ? "
+	args = append(args, terms.Limit)
+
+	fmt.Print(query)
 	rows, err := r.DB.Query(query, args...)
 	if err != nil {
 		return nil, err
@@ -54,7 +78,7 @@ func (r *SQLiteTaskRepository) GetTasks(terms entities.TaskSearch, limit int) ([
 	var tasks []entities.Task
 	for rows.Next() {
 		var task entities.Task
-		err = rows.Scan(&task.ID, &task.Title, &task.Description, &task.Priority, &task.Completed, &task.DueDate)
+		err = rows.Scan(&task.ID, &task.UserID, &task.Title, &task.Description, &task.Priority, &task.Completed, &task.DueDate)
 		if err != nil {
 			return nil, err
 		}
@@ -64,18 +88,18 @@ func (r *SQLiteTaskRepository) GetTasks(terms entities.TaskSearch, limit int) ([
 	return tasks, nil
 }
 
-func (r *SQLiteTaskRepository) GetTaskByID(id int) (entities.Task, error) {
-	result, err := r.DB.Query("SELECT * FROM tasks WHERE ID = ?", id)
+func (r *SQLiteTaskRepository) GetTaskByID(id int, userID int) (entities.Task, error) {
+	result, err := r.DB.Query("SELECT * FROM tasks WHERE id = ? AND  user_id = ?", id, userID)
 
 	if err != nil {
-		return entities.Task{}, err
+		return entities.Task{}, entities.ErrDatabaseFailed
 	}
 
 	defer result.Close()
 
 	if result.Next() {
 		var task entities.Task
-		err := result.Scan(&task.ID, &task.Title, &task.Description, &task.Priority, &task.Completed, &task.DueDate)
+		err := result.Scan(&task.ID, &task.UserID, &task.Title, &task.Description, &task.Priority, &task.Completed, &task.DueDate)
 		if err != nil {
 			return entities.Task{}, err
 		}
@@ -85,33 +109,47 @@ func (r *SQLiteTaskRepository) GetTaskByID(id int) (entities.Task, error) {
 	return entities.Task{}, entities.ErrNotFound
 }
 
-func (r *SQLiteTaskRepository) UpdateTask(taskUpdates entities.Task, id int) (entities.Task, error) {
-	result, err := r.DB.Exec("UPDATE tasks SET title = ?, description = ?, Priority = ?, DueDate = ? WHERE id = ?",
-		taskUpdates.Title, taskUpdates.Description, taskUpdates.Priority, taskUpdates.DueDate, id)
+func (r *SQLiteTaskRepository) UpdateTask(taskUpdates entities.Task, taskID int, userID int) (entities.Task, error) {
+	result, err := r.DB.Exec("UPDATE tasks SET title = ?, description = ?, Priority = ?, DueDate = ? WHERE id = ? AND user_id = ?",
+		taskUpdates.Title, taskUpdates.Description, taskUpdates.Priority, taskUpdates.DueDate, taskID, userID)
 
 	if err != nil {
 		return entities.Task{}, err
 	}
 
-	_, err = result.RowsAffected()
+	affected, err := result.RowsAffected()
+
+	fmt.Print(affected)
+
+	if affected == int64(0) {
+		return entities.Task{}, entities.ErrNotFound
+	}
 
 	return taskUpdates, nil
 }
 
-func (r *SQLiteTaskRepository) DeleteTask(id int) (int64, error) {
-	result, err := r.DB.Exec("DELETE FROM tasks WHERE id = ?", id)
+func (r *SQLiteTaskRepository) DeleteTask(id int, userID int) (int64, error) {
+	result, err := r.DB.Exec("DELETE FROM tasks WHERE id = ? AND  user_id = ?", id, userID)
 
 	if err != nil {
 		return 0, err
 	}
 
+	if rows, _ := result.RowsAffected(); rows == 0 {
+		return 0, entities.ErrNotFound
+	}
+
 	return result.RowsAffected()
 }
 
-func (r *SQLiteTaskRepository) MarkTaskAsDone(id int) (int64, error) {
-	result, err := r.DB.Exec("UPDATE tasks SET completed = ? WHERE id = ?", true, id)
+func (r *SQLiteTaskRepository) MarkTaskAsDone(id int, userID int) (int64, error) {
+	result, err := r.DB.Exec("UPDATE tasks SET completed = ? WHERE id = ? AND  user_id = ?", true, id, userID)
 	if err != nil {
 		return 0, err
+	}
+
+	if rows, _ := result.RowsAffected(); rows == 0 {
+		return 0, entities.ErrNotFound
 	}
 
 	return result.RowsAffected()

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"backendGo/internal/auth"
@@ -44,7 +45,12 @@ func AuthMiddleware(r *store.Redis) gin.HandlerFunc {
 			return
 		}
 
-		c.Set("userID", claims.Subject)
+		// Store userID as int (convert claims.Subject to int)
+		var userID int
+		if claims.Subject != "" {
+			userID, _ = strconv.Atoi(claims.Subject)
+		}
+		c.Set("userID", userID)
 		c.Next()
 	}
 }

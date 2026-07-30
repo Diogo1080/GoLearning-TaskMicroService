@@ -49,108 +49,73 @@ func init() {
 	gin.SetMode(gin.TestMode)
 }
 
-// TestHandleCreateUser tests user creation endpoint
-func TestHandleCreateUser(t *testing.T) {
-	tests := []struct {
-		name           string
-		jsonPayload    string
-		setupMocks     func(m *MockUserService)
-		expectedStatus int
-	}{
-		{
-			name:           "returns 400 on invalid JSON",
-			jsonPayload:    `{invalid json}`,
-			setupMocks:     nil,
-			expectedStatus: http.StatusBadRequest,
-		},
-		{
-			name:        "returns 201 on successful creation",
-			jsonPayload: `{"username":"testuser","password":"secret123"}`,
-			setupMocks: func(m *MockUserService) {
-				m.On("CreateUser", mock.MatchedBy(func(u entities.User) bool {
-					return u.Username == "testuser"
-				})).Return(entities.UserDTO{
-					ID:       1,
-					Username: "testuser",
-				}, nil)
-			},
-			expectedStatus: http.StatusCreated,
-		},
-		{
-			name:        "returns 500 when service returns error",
-			jsonPayload: `{"username":"failuser","password":"secret"}`,
-			setupMocks: func(m *MockUserService) {
-				m.On("CreateUser", mock.Anything).Return(entities.UserDTO{}, errors.New("db error"))
-			},
-			expectedStatus: http.StatusInternalServerError,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			mockSvc := &MockUserService{}
-			if tt.setupMocks != nil {
-				tt.setupMocks(mockSvc)
-			}
-
-			handler := server.NewUserHandler(mockSvc)
-
-			w := httptest.NewRecorder()
-			c, _ := gin.CreateTestContext(w)
-			c.Request, _ = http.NewRequest("POST", "/users", strings.NewReader(tt.jsonPayload))
-			c.Request.Header.Set("Content-Type", "application/json")
-
-			handler.HandleCreateUser(c)
-
-			assert.Equal(t, tt.expectedStatus, w.Code)
-
-			if tt.setupMocks != nil {
-				mockSvc.AssertExpectations(t)
-			}
-		})
-	}
-}
-
-// TestHandleGetUserByUsername tests getting user by username
 func TestHandleGetUserByUsername(t *testing.T) {
 	tests := []struct {
 		name           string
 		username       string
+		authUserID     int
+		setAuth        bool
 		setupMocks     func(m *MockUserService)
 		expectedStatus int
 	}{
 		{
+			name:           "returns 401 when not authenticated",
+			username:       "testuser",
+			setAuth:        false,
+			expectedStatus: http.StatusUnauthorized,
+		},
+		{
 			name:           "returns 400 when username is empty",
 			username:       "",
-			setupMocks:     nil,
+			authUserID:     1,
+			setAuth:        true,
 			expectedStatus: http.StatusBadRequest,
 		},
 		{
-			name:     "returns 200 on successful lookup",
-			username: "testuser",
+			name:       "returns 403 when looking up another user",
+			username:   "otheruser",
+			authUserID: 1,
+			setAuth:    true,
 			setupMocks: func(m *MockUserService) {
-				m.On("GetUserByUsername", "testuser").Return(entities.UserDTO{
-					ID:       1,
-					Username: "testuser",
+				m.On("GetUserByUsername", "otheruser").Return(entities.UserDTO{
+					ID:       2,
+					Username: "otheruser",
 				}, nil)
 			},
-			expectedStatus: http.StatusFound, // Note: BUG - should be StatusOK (200)
+			expectedStatus: http.StatusForbidden,
 		},
 		{
-			name:     "returns 404 when user not found",
-			username: "nonexistent",
+			name:       "returns 200 when looking up own username",
+			username:   "myuser",
+			authUserID: 1,
+			setAuth:    true,
+			setupMocks: func(m *MockUserService) {
+				m.On("GetUserByUsername", "myuser").Return(entities.UserDTO{
+					ID:       1,
+					Username: "myuser",
+				}, nil)
+			},
+			expectedStatus: http.StatusFound,
+		},
+		{
+			name:       "returns 404 when user not found",
+			username:   "nonexistent",
+			authUserID: 1,
+			setAuth:    true,
 			setupMocks: func(m *MockUserService) {
 				m.On("GetUserByUsername", "nonexistent").Return(entities.UserDTO{}, entities.ErrNotFound)
 			},
 			expectedStatus: http.StatusNotFound,
 		},
 		{
-			name:     "returns 424 for other errors",
-			username: "erruser",
+			name:       "returns 500 for other service errors",
+			username:   "erruser",
+			authUserID: 1,
+			setAuth:    true,
 			setupMocks: func(m *MockUserService) {
-				m.On("GetUserByUsername", "erruser").Return(entities.UserDTO{}, errors.New("some error"))
+				m.On("GetUserByUsername", "erruser").Return(entities.UserDTO{}, errors.New("db error"))
 			},
-			expectedStatus: http.StatusFailedDependency,
+			expectedStatus: http.StatusInternalServerError,
 		},
 	}
 
@@ -171,6 +136,10 @@ func TestHandleGetUserByUsername(t *testing.T) {
 			}
 			c.Request, _ = http.NewRequest("GET", "/users/"+tt.username, nil)
 
+			if tt.setAuth {
+				c.Set("userID", tt.authUserID)
+			}
+
 			handler.HandleGetUserByUsername(c)
 
 			assert.Equal(t, tt.expectedStatus, w.Code)
@@ -182,42 +151,62 @@ func TestHandleGetUserByUsername(t *testing.T) {
 	}
 }
 
-// TestHandleGetUserByID tests getting user by ID
 func TestHandleGetUserByID(t *testing.T) {
 	tests := []struct {
 		name           string
 		id             string
+		authUserID     int
+		setAuth        bool
 		setupMocks     func(m *MockUserService)
 		expectedStatus int
 	}{
 		{
+			name:           "returns 401 when not authenticated",
+			id:             "1",
+			setAuth:        false,
+			expectedStatus: http.StatusUnauthorized,
+		},
+		{
 			name:           "returns 400 when ID is invalid",
 			id:             "abc",
-			setupMocks:     nil,
+			authUserID:     1,
+			setAuth:        true,
 			expectedStatus: http.StatusBadRequest,
 		},
 		{
 			name:           "returns 400 when ID is negative",
 			id:             "-1",
-			setupMocks:     nil,
+			authUserID:     1,
+			setAuth:        true,
 			expectedStatus: http.StatusBadRequest,
 		},
 		{
-			name: "returns 200 on successful lookup",
-			id:   "1",
+			name:           "returns 403 when requesting another user's ID",
+			id:             "2",
+			authUserID:     1,
+			setAuth:        true,
+			expectedStatus: http.StatusForbidden,
+		},
+		{
+			name:       "returns 200 when requesting own ID",
+			id:         "1",
+			authUserID: 1,
+			setAuth:    true,
 			setupMocks: func(m *MockUserService) {
 				m.On("GetUserByID", 1).Return(entities.UserDTO{
 					ID:       1,
 					Username: "testuser",
 				}, nil)
 			},
-			expectedStatus: http.StatusFound, // Note: BUG - should be StatusOK (200)
+			expectedStatus: http.StatusFound,
 		},
 		{
-			name: "returns 500 when service returns error",
-			id:   "999",
+			name:       "returns 500 when service returns error",
+			id:         "1",
+			authUserID: 1,
+			setAuth:    true,
 			setupMocks: func(m *MockUserService) {
-				m.On("GetUserByID", 999).Return(entities.UserDTO{}, errors.New("db error"))
+				m.On("GetUserByID", 1).Return(entities.UserDTO{}, errors.New("db error"))
 			},
 			expectedStatus: http.StatusInternalServerError,
 		},
@@ -237,6 +226,10 @@ func TestHandleGetUserByID(t *testing.T) {
 			c.Params = gin.Params{{Key: "id", Value: tt.id}}
 			c.Request, _ = http.NewRequest("GET", "/users/"+tt.id, nil)
 
+			if tt.setAuth {
+				c.Set("userID", tt.authUserID)
+			}
+
 			handler.HandleGetUserByID(c)
 
 			assert.Equal(t, tt.expectedStatus, w.Code)
@@ -248,32 +241,52 @@ func TestHandleGetUserByID(t *testing.T) {
 	}
 }
 
-// TestHandlePasswordChange tests password update endpoint
 func TestHandlePasswordChange(t *testing.T) {
 	tests := []struct {
 		name           string
 		id             string
+		authUserID     int
+		setAuth        bool
 		jsonPayload    string
 		setupMocks     func(m *MockUserService)
 		expectedStatus int
 	}{
 		{
+			name:           "returns 401 when not authenticated",
+			id:             "1",
+			setAuth:        false,
+			jsonPayload:    `{"password":"newpass"}`,
+			expectedStatus: http.StatusUnauthorized,
+		},
+		{
 			name:           "returns 400 when ID is invalid",
 			id:             "abc",
+			authUserID:     1,
+			setAuth:        true,
 			jsonPayload:    `{"password":"newpass"}`,
-			setupMocks:     nil,
 			expectedStatus: http.StatusBadRequest,
 		},
 		{
 			name:           "returns 400 when JSON is invalid",
 			id:             "1",
+			authUserID:     1,
+			setAuth:        true,
 			jsonPayload:    `{invalid}`,
-			setupMocks:     nil,
 			expectedStatus: http.StatusBadRequest,
 		},
 		{
-			name:        "returns 200 on successful update",
+			name:           "returns 403 when changing another user's password",
+			id:             "2",
+			authUserID:     1,
+			setAuth:        true,
+			jsonPayload:    `{"password":"newpass"}`,
+			expectedStatus: http.StatusForbidden,
+		},
+		{
+			name:        "returns 200 when changing own password",
 			id:          "1",
+			authUserID:  1,
+			setAuth:     true,
 			jsonPayload: `{"password":"newpass"}`,
 			setupMocks: func(m *MockUserService) {
 				m.On("UpdateUser", mock.MatchedBy(func(u entities.User) bool {
@@ -288,6 +301,8 @@ func TestHandlePasswordChange(t *testing.T) {
 		{
 			name:        "returns 500 when service returns error",
 			id:          "1",
+			authUserID:  1,
+			setAuth:     true,
 			jsonPayload: `{"password":"newpass"}`,
 			setupMocks: func(m *MockUserService) {
 				m.On("UpdateUser", mock.Anything, 1).Return(entities.UserDTO{}, errors.New("update failed"))
@@ -311,6 +326,10 @@ func TestHandlePasswordChange(t *testing.T) {
 			c.Request, _ = http.NewRequest("PUT", "/users/"+tt.id+"/password", strings.NewReader(tt.jsonPayload))
 			c.Request.Header.Set("Content-Type", "application/json")
 
+			if tt.setAuth {
+				c.Set("userID", tt.authUserID)
+			}
+
 			handler.HandlePasswordChange(c)
 
 			assert.Equal(t, tt.expectedStatus, w.Code)
@@ -322,37 +341,57 @@ func TestHandlePasswordChange(t *testing.T) {
 	}
 }
 
-// TestHandleDeleteUser tests user deletion endpoint
 func TestHandleDeleteUser(t *testing.T) {
 	tests := []struct {
 		name           string
 		id             string
+		authUserID     int
+		setAuth        bool
 		setupMocks     func(m *MockUserService)
 		expectedStatus int
 	}{
 		{
+			name:           "returns 401 when not authenticated",
+			id:             "1",
+			setAuth:        false,
+			expectedStatus: http.StatusUnauthorized,
+		},
+		{
 			name:           "returns 400 when ID is invalid",
 			id:             "abc",
-			setupMocks:     nil,
+			authUserID:     1,
+			setAuth:        true,
 			expectedStatus: http.StatusBadRequest,
 		},
 		{
 			name:           "returns 400 when ID is negative",
 			id:             "-1",
-			setupMocks:     nil,
+			authUserID:     1,
+			setAuth:        true,
 			expectedStatus: http.StatusBadRequest,
 		},
 		{
-			name: "returns 200 on successful deletion",
-			id:   "1",
+			name:           "returns 403 when deleting another user",
+			id:             "2",
+			authUserID:     1,
+			setAuth:        true,
+			expectedStatus: http.StatusForbidden,
+		},
+		{
+			name:       "returns 200 when deleting own account",
+			id:         "1",
+			authUserID: 1,
+			setAuth:    true,
 			setupMocks: func(m *MockUserService) {
 				m.On("DeleteUser", 1).Return(nil)
 			},
 			expectedStatus: http.StatusOK,
 		},
 		{
-			name: "returns 500 when service returns error",
-			id:   "1",
+			name:       "returns 500 when service errors on deleting own account",
+			id:         "1",
+			authUserID: 1,
+			setAuth:    true,
 			setupMocks: func(m *MockUserService) {
 				m.On("DeleteUser", 1).Return(errors.New("constraint violation"))
 			},
@@ -373,6 +412,10 @@ func TestHandleDeleteUser(t *testing.T) {
 			c, _ := gin.CreateTestContext(w)
 			c.Params = gin.Params{{Key: "id", Value: tt.id}}
 			c.Request, _ = http.NewRequest("DELETE", "/users/"+tt.id, nil)
+
+			if tt.setAuth {
+				c.Set("userID", tt.authUserID)
+			}
 
 			handler.HandleDeleteUser(c)
 

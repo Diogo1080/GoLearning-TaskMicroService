@@ -30,5 +30,6 @@ func (r *SQLiteAuthRepository) GetUserByUsername(username string) (entities.User
 		return user, nil
 	}
 
-	return entities.User{}, sql.ErrNoRows
+	return entities.User{}, entities.ErrNotFound
+
 }

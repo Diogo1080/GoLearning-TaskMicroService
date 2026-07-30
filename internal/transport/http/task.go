@@ -3,7 +3,6 @@ package http
 import (
 	entities "backendGo/internal/domain"
 	"errors"
-	"fmt"
 	"net/http"
 	"strconv"
 
@@ -12,11 +11,11 @@ import (
 
 type TaskServicePort interface {
 	CreateTask(task entities.Task) (entities.Task, error)
-	GetTasks(terms entities.TaskSearch, limit int) ([]entities.Task, error)
-	GetTaskByID(id int) (entities.Task, error)
-	UpdateTask(task entities.Task, id int) (entities.Task, error)
-	DeleteTask(id int) error
-	MarkTaskAsDone(id int) (int, error)
+	GetTasks(terms entities.TaskSearch) ([]entities.Task, error)
+	GetTaskByID(id int, userID int) (entities.Task, error)
+	UpdateTask(task entities.Task, taskID int, userID int) (entities.Task, error)
+	DeleteTask(id int, userID int) error
+	MarkTaskAsDone(id int, userID int) (int, error)
 }
 
 type TaskHandler struct {
@@ -28,11 +27,19 @@ func NewTaskHandler(svc TaskServicePort) *TaskHandler {
 }
 
 func (h *TaskHandler) HandleAddTask(c *gin.Context) {
+	authID, ok := getAuthenticatedUserID(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, entities.ErrUnauthorized)
+		return
+	}
+
 	var in entities.Task
 	if err := c.ShouldBindJSON(&in); err != nil {
 		c.JSON(http.StatusBadRequest, entities.ErrBadData)
 		return
 	}
+
+	in.UserID = int64(authID)
 
 	task, err := h.svc.CreateTask(in)
 	if err != nil {
@@ -44,17 +51,24 @@ func (h *TaskHandler) HandleAddTask(c *gin.Context) {
 }
 
 func (h *TaskHandler) HandleGetTasks(c *gin.Context) {
+	authID, ok := getAuthenticatedUserID(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
 	terms := entities.TaskSearch{
 		Search:     c.Request.URL.Query().Get("search"),
+		UserID:     authID,
 		Priority:   c.Request.URL.Query().Get("priority"),
 		Completed:  c.Request.URL.Query().Get("completed"),
 		DueDateMin: c.Request.URL.Query().Get("dueDataMin"),
 		DueDateMax: c.Request.URL.Query().Get("dueDataMax"),
+		OrderBy:    c.Request.URL.Query().Get("orderBy"),
+		Limit:      100,
 	}
 
-	limit := 100
-
-	tasks, err := h.svc.GetTasks(terms, limit)
+	tasks, err := h.svc.GetTasks(terms)
 
 	if err != nil {
 		if errors.Is(err, entities.ErrBadData) {
@@ -78,6 +92,12 @@ func (h *TaskHandler) HandleGetTasks(c *gin.Context) {
 func (h *TaskHandler) HandleGetTaskById(c *gin.Context) {
 	id := c.Param("id")
 
+	authID, ok := getAuthenticatedUserID(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, entities.ErrUnauthorized)
+		return
+	}
+
 	if checkId(id) {
 		c.JSON(http.StatusBadRequest, entities.ErrBadData)
 		return
@@ -85,7 +105,8 @@ func (h *TaskHandler) HandleGetTaskById(c *gin.Context) {
 
 	i, _ := strconv.Atoi(id)
 
-	task, err := h.svc.GetTaskByID(i)
+	task, err := h.svc.GetTaskByID(i, authID)
+
 	if err != nil {
 		if errors.Is(err, entities.ErrNotFound) {
 			c.JSON(http.StatusNotFound, err)
@@ -99,6 +120,12 @@ func (h *TaskHandler) HandleGetTaskById(c *gin.Context) {
 }
 
 func (h *TaskHandler) HandleUpdateTask(c *gin.Context) {
+	authID, ok := getAuthenticatedUserID(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, entities.ErrUnauthorized)
+		return
+	}
+
 	var in entities.Task
 	id := c.Param("id")
 
@@ -112,17 +139,20 @@ func (h *TaskHandler) HandleUpdateTask(c *gin.Context) {
 		return
 	}
 
-	fmt.Print(in)
-	idint, err := strconv.Atoi(id)
+	taskID, err := strconv.Atoi(id)
 
 	if err != nil {
 		c.JSON(http.StatusBadRequest, entities.ErrBadData)
 		return
 	}
 
-	task, err := h.svc.UpdateTask(in, idint)
+	task, err := h.svc.UpdateTask(in, taskID, authID)
 
 	if err != nil {
+		if errors.Is(err, entities.ErrNotFound) {
+			c.JSON(http.StatusNotFound, entities.ErrNotFound)
+		}
+		c.JSON(http.StatusInternalServerError, entities.ErrDatabaseFailed)
 		return
 	}
 
@@ -130,6 +160,12 @@ func (h *TaskHandler) HandleUpdateTask(c *gin.Context) {
 }
 
 func (h *TaskHandler) HandleDeleteTask(c *gin.Context) {
+	authID, ok := getAuthenticatedUserID(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, entities.ErrUnauthorized)
+		return
+	}
+
 	id := c.Param("id")
 
 	if checkId(id) {
@@ -139,7 +175,7 @@ func (h *TaskHandler) HandleDeleteTask(c *gin.Context) {
 
 	i, _ := strconv.Atoi(id)
 
-	err := h.svc.DeleteTask(i)
+	err := h.svc.DeleteTask(i, authID)
 
 	if err != nil {
 		if errors.Is(err, entities.ErrNotFound) {
@@ -154,6 +190,12 @@ func (h *TaskHandler) HandleDeleteTask(c *gin.Context) {
 }
 
 func (h *TaskHandler) HandleCompleteTask(c *gin.Context) {
+	authID, ok := getAuthenticatedUserID(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, entities.ErrUnauthorized)
+		return
+	}
+
 	id := c.Param("id")
 
 	if checkId(id) {
@@ -163,9 +205,13 @@ func (h *TaskHandler) HandleCompleteTask(c *gin.Context) {
 
 	i, _ := strconv.Atoi(id)
 
-	rows, err := h.svc.MarkTaskAsDone(i)
+	rows, err := h.svc.MarkTaskAsDone(i, authID)
 
 	if err != nil {
+		if errors.Is(err, entities.ErrNotFound) {
+			c.JSON(http.StatusNotFound, err)
+			return
+		}
 		c.JSON(http.StatusInternalServerError, err)
 		return
 	}

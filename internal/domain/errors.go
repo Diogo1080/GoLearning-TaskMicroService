@@ -9,4 +9,6 @@ var (
 	ErrBadData = errors.New("bad data")
 
 	ErrUnauthorized = errors.New("unauthorized")
+
+	ErrDatabaseFailed = errors.New("Database failed")
 )

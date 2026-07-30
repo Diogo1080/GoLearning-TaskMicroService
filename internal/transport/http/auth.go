@@ -4,6 +4,7 @@ import (
 	"backendGo/internal/auth"
 	entities "backendGo/internal/domain"
 	"backendGo/internal/store"
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -23,6 +24,20 @@ func NewAuthHandler(svc AuthServicePort, rds *store.Redis) *AuthHandler {
 	return &AuthHandler{svc: svc, rds: rds}
 }
 
+func getAuthenticatedUserID(c *gin.Context) (int, bool) {
+	val, exists := c.Get("userID")
+	if !exists {
+		return 0, false
+	}
+
+	uid, ok := val.(int)
+	if !ok {
+		return 0, false
+	}
+
+	return uid, true
+}
+
 func (h *AuthHandler) HandleLogin(c *gin.Context) {
 	var in entities.User
 
@@ -38,6 +53,7 @@ func (h *AuthHandler) HandleLogin(c *gin.Context) {
 		return
 	}
 
+	fmt.Print(user.ID)
 	//Issue token
 	toks, err := auth.IssueTokens(strconv.Itoa(user.ID))
 	if err != nil {

@@ -6,15 +6,19 @@ import (
 )
 
 type TaskSearch struct {
+	UserID     int
 	Search     string
 	Priority   string
 	Completed  string
 	DueDateMin string
 	DueDateMax string
+	OrderBy    string
+	Limit      int
 }
 
 type Task struct {
 	ID          int64     `json:"id"`
+	UserID      int64     `json:"-"`
 	Title       string    `json:"title"`
 	Description string    `json:"description,omitempty"`
 	Priority    int       `json:"priority"`

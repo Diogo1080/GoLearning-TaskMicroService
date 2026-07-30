@@ -21,13 +21,14 @@ import (
 		MarkTaskAsDone(id int) (int64, error)
 	}
 */
+
 type TaskRepository interface {
 	CreateTask(task entities.Task) (entities.Task, error)
-	GetTasks(terms entities.TaskSearch, limit int) ([]entities.Task, error)
-	GetTaskByID(id int) (entities.Task, error)
-	UpdateTask(task entities.Task, id int) (entities.Task, error)
-	DeleteTask(id int) (int64, error)
-	MarkTaskAsDone(id int) (int64, error)
+	GetTasks(terms entities.TaskSearch) ([]entities.Task, error)
+	GetTaskByID(id int, userID int) (entities.Task, error)
+	UpdateTask(task entities.Task, id int, userID int) (entities.Task, error)
+	DeleteTask(id int, userID int) (int64, error)
+	MarkTaskAsDone(id int, userID int) (int64, error)
 }
 
 type TaskService struct {
@@ -56,7 +57,7 @@ func (s *TaskService) CreateTask(task entities.Task) (entities.Task, error) {
 	return created, nil
 }
 
-func (s *TaskService) GetTasks(taskTerms entities.TaskSearch, limit int) ([]entities.Task, error) {
+func (s *TaskService) GetTasks(taskTerms entities.TaskSearch) ([]entities.Task, error) {
 	empty := make([]entities.Task, 0)
 
 	//Sanatise the
@@ -65,7 +66,7 @@ func (s *TaskService) GetTasks(taskTerms entities.TaskSearch, limit int) ([]enti
 		return empty, entities.ErrBadData
 	}
 
-	tasks, err := s.repo.GetTasks(taskTerms, limit)
+	tasks, err := s.repo.GetTasks(taskTerms)
 
 	if err != nil {
 		return empty, err
@@ -74,10 +75,11 @@ func (s *TaskService) GetTasks(taskTerms entities.TaskSearch, limit int) ([]enti
 	return tasks, nil
 }
 
-func (s *TaskService) GetTaskByID(id int) (entities.Task, error) {
-	task, err := s.repo.GetTaskByID(id)
+func (s *TaskService) GetTaskByID(id int, userID int) (entities.Task, error) {
+	task, err := s.repo.GetTaskByID(id, userID)
 
 	if err != nil {
+		fmt.Print(err)
 		return entities.Task{}, err
 	}
 
@@ -88,22 +90,20 @@ func (s *TaskService) GetTaskByID(id int) (entities.Task, error) {
 	return task, nil
 }
 
-func (s *TaskService) UpdateTask(task entities.Task, id int) (entities.Task, error) {
-	task, err := s.repo.UpdateTask(task, id)
-
-	fmt.Print(task.Completed)
+func (s *TaskService) UpdateTask(task entities.Task, taskID int, userID int) (entities.Task, error) {
+	task, err := s.repo.UpdateTask(task, taskID, userID)
 
 	if err != nil {
 		return entities.Task{}, err
 	}
 
-	task.ID = int64(id)
+	task.ID = int64(taskID)
 
 	return task, nil
 }
 
-func (s *TaskService) DeleteTask(id int) error {
-	_, err := s.repo.DeleteTask(id)
+func (s *TaskService) DeleteTask(id int, userID int) error {
+	_, err := s.repo.DeleteTask(id, userID)
 
 	if err != nil {
 		return err
@@ -112,8 +112,8 @@ func (s *TaskService) DeleteTask(id int) error {
 	return nil
 }
 
-func (s *TaskService) MarkTaskAsDone(id int) (int, error) {
-	rows, err := s.repo.MarkTaskAsDone(id)
+func (s *TaskService) MarkTaskAsDone(id int, userID int) (int, error) {
+	rows, err := s.repo.MarkTaskAsDone(id, userID)
 
 	if err != nil {
 		return 0, err
