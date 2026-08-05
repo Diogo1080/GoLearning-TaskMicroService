@@ -1,0 +1,46 @@
+# Git
+.git/
+.gitignore
+
+# Docker
+docker/
+docker-compose*.yml
+Dockerfile.*
+.docker/
+.dockerignore
+
+# Go build artifacts
+*.exe
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+bin/
+dist/
+
+# Database files (we mount volumes)
+*.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Tests
+tests/
+
+# Scheduler DB (local only)
+scheduler.db
+
+# Local env
+.env.local

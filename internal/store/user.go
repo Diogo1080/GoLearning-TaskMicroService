@@ -13,18 +13,8 @@ func NewSQLiteUserRepository(db *sql.DB) *SQLiteUserRepository {
 	return &SQLiteUserRepository{DB: db}
 }
 
-func (r *SQLiteUserRepository) CreateUser(user entities.User) (entities.User, error) {
-	result, err := r.DB.Exec("INSERT INTO users (username, password) VALUES (?, ?)", user.Username, user.Password)
-	if err != nil {
-		return entities.User{}, err
-	}
-
-	user.ID, _ = result.LastInsertId()
-	return user, nil
-}
-
 func (r *SQLiteUserRepository) GetUserByUsername(username string) (entities.User, error) {
-	result, err := r.DB.Query("SELECT id, username, password FROM users WHERE username = ?", username)
+	result, err := r.DB.Query("SELECT id, username, password FROM users WHERE username = $1", username)
 	if err != nil {
 		return entities.User{}, err
 	}
@@ -44,7 +34,7 @@ func (r *SQLiteUserRepository) GetUserByUsername(username string) (entities.User
 }
 
 func (r *SQLiteUserRepository) GetUserByID(id int) (entities.User, error) {
-	result, err := r.DB.Query("SELECT id, username, password FROM users WHERE id = ?", id)
+	result, err := r.DB.Query("SELECT id, username, password FROM users WHERE id = $1", id)
 	if err != nil {
 		return entities.User{}, err
 	}
@@ -64,7 +54,7 @@ func (r *SQLiteUserRepository) GetUserByID(id int) (entities.User, error) {
 }
 
 func (r *SQLiteUserRepository) UpdateUser(user entities.User, id int) (entities.User, error) {
-	result, err := r.DB.Exec("UPDATE users SET password = ? WHERE id = ?",
+	result, err := r.DB.Exec("UPDATE users SET password = $1 WHERE id = $2",
 		user.Password, id)
 	if err != nil {
 		return entities.User{}, err
@@ -84,7 +74,7 @@ func (r *SQLiteUserRepository) UpdateUser(user entities.User, id int) (entities.
 
 func (r *SQLiteUserRepository) DeleteUser(id int) error {
 
-	_, err := r.DB.Exec("DELETE FROM users WHERE id:?", id)
+	_, err := r.DB.Exec("DELETE FROM users WHERE id = $1", id)
 
 	if err != nil {
 		return err

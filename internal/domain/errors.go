@@ -10,5 +10,7 @@ var (
 
 	ErrUnauthorized = errors.New("unauthorized")
 
-	ErrDatabaseFailed = errors.New("Database failed")
+	ErrDatabaseFailed      = errors.New("Database failed")
+	ErrServiceUnavailable  = errors.New("Service unavailable")
+	ErrInternalServerError = errors.New("Internal server error")
 )

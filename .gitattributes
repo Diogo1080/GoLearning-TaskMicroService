@@ -1,2 +1,22 @@
-# Auto detect text files and perform LF normalization
-* text=auto
+# Force LF line endings for all files
+* text=auto eol=lf
+
+# Never convert these (binary files)
+*.exe binary
+*.dll binary
+*.so binary
+*.dylib binary
+
+# Config files stay as-is
+*.md text
+*.txt text
+*.toml text
+*.yaml text
+*.yml text
+*.json text
+*.xml text
+*.html text
+*.css text
+*.js text
+*.go text
+*.proto text

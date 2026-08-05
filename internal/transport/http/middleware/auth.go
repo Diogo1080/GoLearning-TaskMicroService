@@ -2,30 +2,28 @@ package middleware
 
 import (
 	"context"
-	"errors"
 	"net/http"
-	"strconv"
 	"strings"
 
-	"backendGo/internal/auth"
-	"backendGo/internal/store"
+	authClient "backendGo/internal/auth"
 
 	"github.com/gin-gonic/gin"
 )
 
-func bearerFromHeader(c *gin.Context) string {
-	h := c.GetHeader("Authorization")
-	if strings.HasPrefix(h, "Bearer ") {
-		return strings.TrimPrefix(h, "Bearer ")
-	}
-	return ""
+type AuthMiddlewareBuilder struct {
+	authClient *authClient.Client
 }
 
-func AuthMiddleware(r *store.Redis) gin.HandlerFunc {
+func NewAuthMiddlewareBuilder(client *authClient.Client) *AuthMiddlewareBuilder {
+	return &AuthMiddlewareBuilder{authClient: client}
+}
+
+func (b *AuthMiddlewareBuilder) Build() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		tokenStr, _ := c.Cookie("access_token")
+		tokenStr := bearerFromHeader(c)
+
 		if tokenStr == "" {
-			tokenStr = bearerFromHeader(c)
+			tokenStr, _ = c.Cookie("access_token")
 		}
 
 		if tokenStr == "" {
@@ -33,32 +31,22 @@ func AuthMiddleware(r *store.Redis) gin.HandlerFunc {
 			return
 		}
 
-		claims, err := auth.ParseAccess(tokenStr)
-		if err != nil {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid token: " + err.Error()})
-			return
-		}
-
 		ctx := context.Background()
-		if _, err := r.GetUserByJTI(ctx, "access:"+claims.ID); err != nil {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "token revoked"})
+		resp, err := b.authClient.ValidateToken(ctx, tokenStr)
+		if err != nil || !resp.Valid {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid or revoked token"})
 			return
 		}
 
-		// Store userID as int (convert claims.Subject to int)
-		var userID int
-		if claims.Subject != "" {
-			userID, _ = strconv.Atoi(claims.Subject)
-		}
-		c.Set("userID", userID)
+		c.Set("userID", int32(resp.UserId))
 		c.Next()
 	}
 }
 
-func MustCookie(c *gin.Context, name string) (string, error) {
-	val, err := c.Cookie(name)
-	if err != nil || val == "" {
-		return "", errors.New("missing cookie: " + name)
+func bearerFromHeader(c *gin.Context) string {
+	h := c.GetHeader("Authorization")
+	if strings.HasPrefix(h, "Bearer ") {
+		return strings.TrimPrefix(h, "Bearer ")
 	}
-	return val, nil
+	return ""
 }

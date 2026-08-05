@@ -1,16 +1,19 @@
 package http
 
 import (
-	entities "backendGo/internal/domain"
-	"errors"
+	"context"
 	"net/http"
 	"strconv"
+	"time"
+
+	authClient "backendGo/internal/auth"
+	entities "backendGo/internal/domain"
+	"errors"
 
 	"github.com/gin-gonic/gin"
 )
 
 type UserServicePort interface {
-	CreateUser(user entities.User) (entities.UserDTO, error)
 	GetUserByID(id int) (entities.UserDTO, error)
 	GetUserByUsername(username string) (entities.UserDTO, error)
 	UpdateUser(user entities.User, id int) (entities.UserDTO, error)
@@ -18,35 +21,16 @@ type UserServicePort interface {
 }
 
 type UserHandler struct {
-	svc UserServicePort
+	svc        UserServicePort
+	authClient *authClient.Client
 }
 
-func NewUserHandler(svc UserServicePort) *UserHandler {
-	return &UserHandler{svc: svc}
-}
-
-func (h *UserHandler) HandleCreateUser(c *gin.Context) {
-	var in entities.User
-	if err := c.ShouldBindJSON(&in); err != nil {
-		c.JSON(http.StatusBadRequest, entities.ErrBadData)
-		return
-	}
-
-	user, err := h.svc.CreateUser(in)
-	if err != nil {
-		if errors.Is(err, entities.ErrAlreadyExists) {
-			c.JSON(http.StatusConflict, entities.ErrAlreadyExists)
-			return
-		}
-		c.JSON(http.StatusInternalServerError, entities.ErrDatabaseFailed)
-		return
-	}
-
-	c.JSON(http.StatusCreated, user)
+func NewUserHandler(svc UserServicePort, authClient *authClient.Client) *UserHandler {
+	return &UserHandler{svc: svc, authClient: authClient}
 }
 
 func (h *UserHandler) HandleGetUserByUsername(c *gin.Context) {
-	authID, ok := getAuthenticatedUserID(c)
+	authID, ok := getUserID(c)
 	if !ok {
 		c.JSON(http.StatusUnauthorized, entities.ErrUnauthorized)
 		return
@@ -73,11 +57,11 @@ func (h *UserHandler) HandleGetUserByUsername(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusFound, user)
+	c.JSON(http.StatusOK, user) // Fixed: Was StatusFound (302)
 }
 
 func (h *UserHandler) HandleGetUserByID(c *gin.Context) {
-	authID, ok := getAuthenticatedUserID(c)
+	authID, ok := getUserID(c)
 	if !ok {
 		c.JSON(http.StatusUnauthorized, entities.ErrUnauthorized)
 		return
@@ -103,46 +87,43 @@ func (h *UserHandler) HandleGetUserByID(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusFound, user)
+	c.JSON(http.StatusOK, user) // Fixed: Was StatusFound (302)
 }
-
-func (h *UserHandler) HandlePasswordChange(c *gin.Context) {
-	authID, ok := getAuthenticatedUserID(c)
+func (h *UserHandler) HandleChangePassword(c *gin.Context) {
+	authID, ok := getUserID(c)
 	if !ok {
 		c.JSON(http.StatusUnauthorized, entities.ErrUnauthorized)
 		return
 	}
 
-	var in entities.User
-	id := c.Param("id")
+	var input struct {
+		CurrentPassword string `json:"current_password" binding:"required"`
+		NewPassword     string `json:"new_password" binding:"required,min=6"`
+	}
 
-	if err := c.ShouldBindJSON(&in); err != nil {
+	if err := c.ShouldBindJSON(&input); err != nil {
 		c.JSON(http.StatusBadRequest, entities.ErrBadData)
 		return
 	}
 
-	idint, err := strconv.Atoi(id)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
+	defer cancel()
+
+	resp, err := h.authClient.ChangePassword(ctx, authID, input.CurrentPassword, input.NewPassword)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, entities.ErrBadData)
+		c.JSON(http.StatusServiceUnavailable, entities.ErrServiceUnavailable)
 		return
 	}
 
-	if idint != authID {
-		c.JSON(http.StatusForbidden, entities.ErrUnauthorized)
+	if !resp.Success {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": resp.Error})
 		return
 	}
 
-	user, err := h.svc.UpdateUser(in, idint)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, entities.ErrDatabaseFailed)
-		return
-	}
-
-	c.JSON(http.StatusOK, user)
+	c.JSON(http.StatusOK, gin.H{"message": "password changed successfully"})
 }
-
 func (h *UserHandler) HandleDeleteUser(c *gin.Context) {
-	authID, ok := getAuthenticatedUserID(c)
+	authID, ok := getUserID(c)
 	if !ok {
 		c.JSON(http.StatusUnauthorized, entities.ErrUnauthorized)
 		return
@@ -171,5 +152,35 @@ func (h *UserHandler) HandleDeleteUser(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, nil)
+	c.JSON(http.StatusOK, gin.H{"message": "user deleted successfully"})
+}
+
+// HandleUpdateProfile updates non-credential fields
+func (h *UserHandler) HandleUpdateProfile(c *gin.Context) {
+	authID, ok := getUserID(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, entities.ErrUnauthorized)
+		return
+	}
+
+	var input struct {
+		Username string `json:"username"`
+	}
+
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, entities.ErrBadData)
+		return
+	}
+
+	user := entities.User{
+		Username: input.Username,
+	}
+
+	updated, err := h.svc.UpdateUser(user, authID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, entities.ErrDatabaseFailed)
+		return
+	}
+
+	c.JSON(http.StatusOK, updated)
 }

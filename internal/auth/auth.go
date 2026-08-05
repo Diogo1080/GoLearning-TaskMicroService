@@ -3,135 +3,117 @@ package auth
 import (
 	"context"
 	"errors"
-	"fmt"
-	"net/http"
-	"os"
 	"time"
 
-	"github.com/gin-gonic/gin"
-	"github.com/golang-jwt/jwt/v5"
-	"github.com/google/uuid"
+	authv1 "backendGo/api/auth/v1"
 
-	"backendGo/internal/store"
+	"golang.org/x/crypto/bcrypt"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
-type Tokens struct {
-	Access   string
-	Refresh  string
-	JTIAcc   string
-	JTIRef   string
-	ExpAcc   time.Time
-	ExpRef   time.Time
-	UserID   string
-	Issuer   string
-	Audience string
+type Client struct {
+	client authv1.AuthServiceClient
+	conn   *grpc.ClientConn
 }
 
-func IssueTokens(userId string) (*Tokens, error) {
-	now := time.Now()
-
-	t := &Tokens{
-		UserID:   userId,
-		JTIAcc:   uuid.NewString(),
-		JTIRef:   uuid.NewString(),
-		ExpAcc:   now.Add(15 * time.Minute),
-		ExpRef:   now.Add(7 * 24 * time.Hour),
-		Issuer:   "jwt-todo-app",
-		Audience: "jwt-todo-client",
-	}
-
-	acc := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.RegisteredClaims{
-		Subject:   t.UserID,
-		ID:        t.JTIAcc,
-		Issuer:    t.Issuer,
-		Audience:  jwt.ClaimStrings{t.Audience},
-		IssuedAt:  jwt.NewNumericDate(now),
-		ExpiresAt: jwt.NewNumericDate(t.ExpAcc),
-	})
-
-	ref := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.RegisteredClaims{
-		Subject:   t.UserID,
-		ID:        t.JTIRef,
-		Issuer:    t.Issuer,
-		Audience:  jwt.ClaimStrings{t.Audience},
-		IssuedAt:  jwt.NewNumericDate(now),
-		ExpiresAt: jwt.NewNumericDate(t.ExpRef),
-	})
-
-	var err error
-	t.Access, err = acc.SignedString([]byte(os.Getenv("ACCESS_SECRET")))
-	if err != nil {
-		return nil, err
-	}
-	t.Refresh, err = ref.SignedString([]byte(os.Getenv("REFRESH_SECRET")))
-	if err != nil {
-		return nil, err
-	}
-
-	return t, nil
-}
-
-func Persist(ctx context.Context, r *store.Redis, t *Tokens) error {
-	if err := r.SetJTI(ctx, "access:"+t.JTIAcc, t.UserID, t.ExpAcc); err != nil {
-		return err
-	}
-	if err := r.SetJTI(ctx, "refresh:"+t.JTIRef, t.UserID, t.ExpRef); err != nil {
-		return err
-	}
-	return nil
-}
-
-func SetAuthCookies(c *gin.Context, t *Tokens) {
-	c.SetSameSite(http.SameSiteLaxMode)
-	c.SetCookie("access_token", t.Access, int(time.Until(t.ExpAcc).Seconds()), "/", "", true, true)
-	c.SetCookie("refresh_token", t.Refresh, int(time.Until(t.ExpRef).Seconds()), "/", "", true, true)
-}
-
-func ClearAuthCookies(c *gin.Context) {
-	c.SetSameSite(http.SameSiteLaxMode)
-	c.SetCookie("access_token", "", -1, "/", "", true, true)
-	c.SetCookie("refresh_token", "", -1, "/", "", true, true)
-}
-
-func ParseAccess(tokenStr string) (*jwt.RegisteredClaims, error) {
-	secret := os.Getenv("ACCESS_SECRET")
-	return parseWithSecret(tokenStr, secret)
-}
-
-func ParseRefresh(tokenStr string) (*jwt.RegisteredClaims, error) {
-	secret := os.Getenv("REFRESH_SECRET")
-	return parseWithSecret(tokenStr, secret)
-}
-
-func parseWithSecret(tokenStr, secret string) (*jwt.RegisteredClaims, error) {
-	if secret == "" {
-		return nil, errors.New("jwt secret not configured")
-	}
-
-	parser := jwt.NewParser(
-		jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}),
-		jwt.WithAudience("jwt-todo-client"), // Must match JWT creation
-		jwt.WithIssuer("jwt-todo-app"),      // Must match JWT creation
-		jwt.WithLeeway(30*time.Second),      // Tolerance for clock skew
+func NewClient(addr string) (*Client, error) {
+	conn, err := grpc.NewClient(addr,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
 
-	token, err := parser.ParseWithClaims(tokenStr, &jwt.RegisteredClaims{}, func(t *jwt.Token) (interface{}, error) {
-		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, errors.New("unexpected signing method")
-		}
-		return []byte(secret), nil
-	})
-
 	if err != nil {
-		fmt.Printf("JWT parse error: %v", err) // See exact error!
 		return nil, err
 	}
 
-	claims, ok := token.Claims.(*jwt.RegisteredClaims)
-	if !ok || !token.Valid {
-		fmt.Printf("Token invalid: typeAssertion=%v, valid=%v", ok, token.Valid)
-		return nil, errors.New("invalid token")
-	}
+	return &Client{
+		client: authv1.NewAuthServiceClient(conn),
+		conn:   conn,
+	}, nil
+}
 
-	return claims, nil
+func (c *Client) Close() error {
+	return c.conn.Close()
+}
+
+func (c *Client) Register(ctx context.Context, username, password string) (*authv1.RegisterResponse, error) {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	return c.client.Register(ctx, &authv1.RegisterRequest{
+		Username: username,
+		Password: password,
+	})
+}
+
+func (c *Client) ChangePassword(ctx context.Context, userID int, currentPassword, newPassword string) (*authv1.ChangePasswordResponse, error) {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	return c.client.ChangePassword(ctx, &authv1.ChangePasswordRequest{
+		UserId:          int32(userID),
+		CurrentPassword: currentPassword,
+		NewPassword:     newPassword,
+	})
+}
+
+func (c *Client) Login(ctx context.Context, username, password string) (*authv1.LoginResponse, error) {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	return c.client.Login(ctx, &authv1.LoginRequest{
+		Username: username,
+		Password: password,
+	})
+}
+
+func (c *Client) ValidateToken(ctx context.Context, token string) (*authv1.ValidateTokenResponse, error) {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	return c.client.ValidateToken(ctx, &authv1.ValidateTokenRequest{
+		Token: token,
+	})
+}
+
+func (c *Client) RefreshToken(ctx context.Context, refreshToken string) (*authv1.RefreshTokenResponse, error) {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	return c.client.RefreshToken(ctx, &authv1.RefreshTokenRequest{
+		RefreshToken: refreshToken,
+	})
+}
+
+func (c *Client) Logout(ctx context.Context, token string) (*authv1.LogoutResponse, error) {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	return c.client.Logout(ctx, &authv1.LogoutRequest{
+		Token: token,
+	})
+}
+
+// Helper functions for password handling
+func HashPassword(password string) (string, error) {
+	bytes, err := bcrypt.GenerateFromPassword([]byte(password), 14)
+	if err != nil {
+		return "", err
+	}
+	return string(bytes), nil
+}
+
+func VerifyPassword(password, hash string) bool {
+	err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
+	return err == nil
+}
+
+func ValidateRegisterRequest(username, password string) error {
+	if len(username) < 3 || len(username) > 50 {
+		return errors.New("invalid username")
+	}
+	if len(password) < 6 {
+		return errors.New("password too short")
+	}
+	return nil
 }

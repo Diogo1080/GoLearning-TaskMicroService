@@ -15,11 +15,6 @@ type MockUserRepository struct {
 	mock.Mock
 }
 
-func (m *MockUserRepository) CreateUser(user entities.User) (entities.User, error) {
-	args := m.Called(user)
-	return args.Get(0).(entities.User), args.Error(1)
-}
-
 func (m *MockUserRepository) GetUserByID(id int) (entities.User, error) {
 	args := m.Called(id)
 	return args.Get(0).(entities.User), args.Error(1)
@@ -52,97 +47,6 @@ func TestNewUserService(t *testing.T) {
 		svc := service.NewUserService(mockRepo)
 		assert.NotNil(t, svc)
 	})
-}
-
-// TestCreateUser tests user creation flow
-func TestCreateUser(t *testing.T) {
-	tests := []struct {
-		name          string
-		inputUser     entities.User
-		setupMocks    func(m *MockUserRepository)
-		expectedError error
-	}{
-		{
-			name: "successfully creates new user",
-			inputUser: entities.User{
-				Username: "testuser",
-				Password: "rawpassword",
-			},
-			setupMocks: func(m *MockUserRepository) {
-				// Return no user when checking existence
-				m.On("GetUserByUsername", "testuser").Return(entities.User{}, entities.ErrNotFound)
-				// Return created user
-				m.On("CreateUser", mock.MatchedBy(func(u entities.User) bool {
-					return u.Username == "testuser" && u.Password != "rawpassword"
-				})).Return(entities.User{
-					ID:       1,
-					Username: "testuser",
-					Password: "hashedpassword",
-				}, nil)
-			},
-			expectedError: nil,
-		},
-		{
-			name: "fails when user already exists",
-			inputUser: entities.User{
-				Username: "existinguser",
-				Password: "password",
-			},
-			setupMocks: func(m *MockUserRepository) {
-				m.On("GetUserByUsername", "existinguser").Return(entities.User{ID: 1, Username: "existinguser"}, nil)
-			},
-			expectedError: entities.ErrAlreadyExists,
-		},
-		{
-			name: "fails when hashing password errors",
-			inputUser: entities.User{
-				Username: "badhashuser",
-				Password: "invalid",
-			},
-			setupMocks: func(m *MockUserRepository) {
-				m.On("GetUserByUsername", "badhashuser").Return(entities.User{}, entities.ErrNotFound)
-				m.On("CreateUser", mock.Anything).Return(entities.User{}, errors.New("hash failed"))
-			},
-			expectedError: errors.New("hash failed"),
-		},
-		{
-			name: "fails when repo CreateUser errors",
-			inputUser: entities.User{
-				Username: "failcreate",
-				Password: "password",
-			},
-			setupMocks: func(m *MockUserRepository) {
-				m.On("GetUserByUsername", "failcreate").Return(entities.User{}, entities.ErrNotFound)
-				m.On("CreateUser", mock.Anything).Return(entities.User{}, errors.New("db error"))
-			},
-			expectedError: errors.New("db error"),
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			mockRepo := &MockUserRepository{}
-			if tt.setupMocks != nil {
-				tt.setupMocks(mockRepo)
-			}
-
-			svc := service.NewUserService(mockRepo)
-			assert.NotNil(t, svc)
-
-			result, err := svc.CreateUser(tt.inputUser)
-
-			if tt.expectedError != nil {
-				assert.Error(t, err)
-				assert.Equal(t, tt.expectedError, err)
-			} else {
-				assert.NoError(t, err)
-				assert.NotEmpty(t, result.ID)
-				assert.Equal(t, tt.inputUser.Username, result.Username)
-			}
-
-			mockRepo.AssertExpectations(t)
-		})
-	}
 }
 
 // TestGetUserByID tests fetching user by ID

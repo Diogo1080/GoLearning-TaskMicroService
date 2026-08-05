@@ -1,31 +1,34 @@
 package http
 
 import (
-	"backendGo/internal/store"
-	"backendGo/internal/transport/http/middleware"
-
 	"github.com/gin-gonic/gin"
 )
 
-func RegisterRoutes(r *gin.Engine, taskHandler *TaskHandler, userHandler *UserHandler, authHandler *AuthHandler, rds *store.Redis) *gin.Engine {
-	h := NewHandlers(taskHandler, userHandler, authHandler, rds)
-
+func RegisterRoutes(r *gin.Engine, taskHandler *TaskHandler, userHandler *UserHandler, authHandler *AuthHandler, authMiddleware gin.HandlerFunc) *gin.Engine {
+	// Public routes (no auth required)
 	public := r.Group("/api")
-	public.POST("/login", h.AuthHandler.HandleLogin)
-	public.POST("/register", h.UserHandler.HandleCreateUser)
+	public.POST("/register", authHandler.HandleRegister)
+	public.POST("/login", authHandler.HandleLogin)
+	public.POST("/logout", authHandler.HandleLogout)
+	public.POST("/refresh", authHandler.HandleRefreshToken)
 
+	// Protected routes (require valid JWT token via auth microservice)
 	protected := r.Group("/api")
-	protected.Use(middleware.AuthMiddleware(rds))
-	protected.GET("/user/id/:id", h.UserHandler.HandleGetUserByID)
-	protected.GET("/user/name/:username", h.UserHandler.HandleGetUserByUsername)
-	protected.PATCH("/user/passwordChange/:id", h.UserHandler.HandlePasswordChange)
+	protected.Use(authMiddleware)
 
-	protected.POST("/task", h.TaskHandler.HandleAddTask)
-	protected.GET("/task", h.TaskHandler.HandleGetTasks)
-	protected.GET("/task/:id", h.TaskHandler.HandleGetTaskById)
-	protected.PUT("/task/:id", h.TaskHandler.HandleUpdateTask)
-	protected.DELETE("/task/:id", h.TaskHandler.HandleDeleteTask)
-	protected.PATCH("/task/complete/:id", h.TaskHandler.HandleCompleteTask)
+	// User endpoints (profile management only)
+	protected.GET("/user/id/:id", userHandler.HandleGetUserByID)
+	protected.GET("/user/name/:username", userHandler.HandleGetUserByUsername)
+	protected.PATCH("/user/password/:id", userHandler.HandleChangePassword)
+	protected.PUT("/user/profile", userHandler.HandleUpdateProfile)
+
+	// Task endpoints (all CRUD operations)
+	protected.POST("/task", taskHandler.HandleAddTask)
+	protected.GET("/task", taskHandler.HandleGetTasks)
+	protected.GET("/task/:id", taskHandler.HandleGetTaskById)
+	protected.PUT("/task/:id", taskHandler.HandleUpdateTask)
+	protected.DELETE("/task/:id", taskHandler.HandleDeleteTask)
+	protected.PATCH("/task/complete/:id", taskHandler.HandleCompleteTask)
 
 	return r
 }

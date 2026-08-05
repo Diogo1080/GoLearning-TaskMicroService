@@ -19,7 +19,7 @@ type TaskServicePort interface {
 }
 
 type TaskHandler struct {
-	svc TaskServicePort // ← interface, not concrete type
+	svc TaskServicePort
 }
 
 func NewTaskHandler(svc TaskServicePort) *TaskHandler {
@@ -27,7 +27,8 @@ func NewTaskHandler(svc TaskServicePort) *TaskHandler {
 }
 
 func (h *TaskHandler) HandleAddTask(c *gin.Context) {
-	authID, ok := getAuthenticatedUserID(c)
+	authID, ok := getUserID(c)
+
 	if !ok {
 		c.JSON(http.StatusUnauthorized, entities.ErrUnauthorized)
 		return
@@ -51,15 +52,15 @@ func (h *TaskHandler) HandleAddTask(c *gin.Context) {
 }
 
 func (h *TaskHandler) HandleGetTasks(c *gin.Context) {
-	authID, ok := getAuthenticatedUserID(c)
+	authID, ok := getUserID(c)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		c.JSON(http.StatusUnauthorized, entities.ErrUnauthorized)
 		return
 	}
 
 	terms := entities.TaskSearch{
 		Search:     c.Request.URL.Query().Get("search"),
-		UserID:     authID,
+		UserID:     int(authID),
 		Priority:   c.Request.URL.Query().Get("priority"),
 		Completed:  c.Request.URL.Query().Get("completed"),
 		DueDateMin: c.Request.URL.Query().Get("dueDataMin"),
@@ -92,7 +93,7 @@ func (h *TaskHandler) HandleGetTasks(c *gin.Context) {
 func (h *TaskHandler) HandleGetTaskById(c *gin.Context) {
 	id := c.Param("id")
 
-	authID, ok := getAuthenticatedUserID(c)
+	authID, ok := getUserID(c)
 	if !ok {
 		c.JSON(http.StatusUnauthorized, entities.ErrUnauthorized)
 		return
@@ -120,7 +121,7 @@ func (h *TaskHandler) HandleGetTaskById(c *gin.Context) {
 }
 
 func (h *TaskHandler) HandleUpdateTask(c *gin.Context) {
-	authID, ok := getAuthenticatedUserID(c)
+	authID, ok := getUserID(c)
 	if !ok {
 		c.JSON(http.StatusUnauthorized, entities.ErrUnauthorized)
 		return
@@ -160,7 +161,7 @@ func (h *TaskHandler) HandleUpdateTask(c *gin.Context) {
 }
 
 func (h *TaskHandler) HandleDeleteTask(c *gin.Context) {
-	authID, ok := getAuthenticatedUserID(c)
+	authID, ok := getUserID(c)
 	if !ok {
 		c.JSON(http.StatusUnauthorized, entities.ErrUnauthorized)
 		return
@@ -190,7 +191,7 @@ func (h *TaskHandler) HandleDeleteTask(c *gin.Context) {
 }
 
 func (h *TaskHandler) HandleCompleteTask(c *gin.Context) {
-	authID, ok := getAuthenticatedUserID(c)
+	authID, ok := getUserID(c)
 	if !ok {
 		c.JSON(http.StatusUnauthorized, entities.ErrUnauthorized)
 		return
