@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	authClient "backendGo/internal/auth"
+	entities "backendGo/internal/domain"
 
 	"github.com/gin-gonic/gin"
 )
@@ -27,14 +28,14 @@ func (b *AuthMiddlewareBuilder) Build() gin.HandlerFunc {
 		}
 
 		if tokenStr == "" {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "missing token"})
+			c.AbortWithStatusJSON(http.StatusUnauthorized, entities.ErrBadData)
 			return
 		}
 
 		ctx := context.Background()
 		resp, err := b.authClient.ValidateToken(ctx, tokenStr)
 		if err != nil || !resp.Valid {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid or revoked token"})
+			c.AbortWithStatusJSON(http.StatusUnauthorized, entities.ErrBadData)
 			return
 		}
 
