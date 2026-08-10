@@ -6,6 +6,7 @@ import (
 	"time"
 
 	authClient "backendGo/internal/auth"
+	entities "backendGo/internal/domain"
 
 	"github.com/gin-gonic/gin"
 )
@@ -26,7 +27,7 @@ func (h *AuthHandler) HandleRegister(c *gin.Context) {
 
 	var input RegisterInput
 	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		c.JSON(http.StatusBadRequest, entities.ErrBadData)
 		return
 	}
 
@@ -35,12 +36,12 @@ func (h *AuthHandler) HandleRegister(c *gin.Context) {
 
 	resp, err := h.authClient.Register(ctx, input.Username, input.Password)
 	if err != nil {
-		c.JSON(http.StatusServiceUnavailable, err.Error())
+		c.JSON(http.StatusServiceUnavailable, entities.ErrServiceUnavailable)
 		return
 	}
 
 	if !resp.Success {
-		c.JSON(http.StatusConflict, gin.H{"error": resp.Error})
+		c.JSON(http.StatusConflict, entities.ErrConflict)
 		return
 	}
 
@@ -58,7 +59,7 @@ func (h *AuthHandler) HandleLogin(c *gin.Context) {
 
 	var input LoginInput
 	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		c.JSON(http.StatusBadRequest, entities.ErrBadData)
 		return
 	}
 
@@ -67,12 +68,12 @@ func (h *AuthHandler) HandleLogin(c *gin.Context) {
 
 	resp, err := h.authClient.Login(ctx, input.Username, input.Password)
 	if err != nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "auth service unavailable"})
+		c.JSON(http.StatusServiceUnavailable, entities.ErrServiceUnavailable)
 		return
 	}
 
 	if resp == nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid credentials"})
+		c.JSON(http.StatusUnauthorized, entities.ErrUnauthorized)
 		return
 	}
 
@@ -94,7 +95,7 @@ func (h *AuthHandler) HandleLogout(c *gin.Context) {
 	}
 
 	if token == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "missing token"})
+		c.JSON(http.StatusBadRequest, entities.ErrBadData)
 		return
 	}
 
@@ -103,7 +104,7 @@ func (h *AuthHandler) HandleLogout(c *gin.Context) {
 
 	_, err := h.authClient.Logout(ctx, token)
 	if err != nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "failed to logout"})
+		c.JSON(http.StatusServiceUnavailable, entities.ErrServiceUnavailable)
 		return
 	}
 
@@ -122,7 +123,7 @@ func (h *AuthHandler) HandleRefreshToken(c *gin.Context) {
 
 	var input RefreshInput
 	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		c.JSON(http.StatusBadRequest, entities.ErrBadData)
 		return
 	}
 
@@ -131,12 +132,12 @@ func (h *AuthHandler) HandleRefreshToken(c *gin.Context) {
 
 	resp, err := h.authClient.RefreshToken(ctx, input.RefreshToken)
 	if err != nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "auth service unavailable"})
+		c.JSON(http.StatusServiceUnavailable, entities.ErrServiceUnavailable)
 		return
 	}
 
 	if resp == nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid refresh token"})
+		c.JSON(http.StatusUnauthorized, entities.ErrUnauthorized)
 		return
 	}
 

@@ -13,4 +13,5 @@ var (
 	ErrDatabaseFailed      = errors.New("Database failed")
 	ErrServiceUnavailable  = errors.New("Service unavailable")
 	ErrInternalServerError = errors.New("Internal server error")
+	ErrConflict            = errors.New("Conflict")
 )
