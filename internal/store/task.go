@@ -1,9 +1,11 @@
 package store
 
 import (
-	entities "backendGo/internal/domain"
+	"context"
 	"database/sql"
 	"fmt"
+
+	entities "github.com/Diogo1080/GoLearning-TaskMicroService/internal/domain"
 )
 
 type SQLiteTaskRepository struct {
@@ -14,19 +16,18 @@ func NewSQLiteTaskRepository(db *sql.DB) *SQLiteTaskRepository {
 	return &SQLiteTaskRepository{DB: db}
 }
 
-func (r *SQLiteTaskRepository) CreateTask(task entities.Task) (entities.Task, error) {
-	result, err := r.DB.Exec("INSERT INTO tasks (user_id, title, description, priority, completed, dueDate) VALUES ($1, $2, $3, $4, $5, $6)",
-		task.UserID, task.Title, task.Description, task.Priority, task.Completed, task.DueDate)
+func (r *SQLiteTaskRepository) CreateTask(ctx context.Context, task entities.Task) (entities.Task, error) {
+	err := r.DB.QueryRowContext(ctx, "INSERT INTO tasks (user_id, title, description, priority, completed, dueDate) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id",
+		task.UserID, task.Title, task.Description, task.Priority, task.Completed, task.DueDate).Scan(&task.ID)
 
 	if err != nil {
 		return entities.Task{}, err
 	}
 
-	task.ID, _ = result.LastInsertId()
 	return task, nil
 }
 
-func (r *SQLiteTaskRepository) GetTasks(terms entities.TaskSearch) ([]entities.Task, error) {
+func (r *SQLiteTaskRepository) GetTasks(ctx context.Context, terms entities.TaskSearch) ([]entities.Task, error) {
 	i := int(1)
 	query := "SELECT * FROM tasks "
 	args := []interface{}{}
@@ -77,7 +78,7 @@ func (r *SQLiteTaskRepository) GetTasks(terms entities.TaskSearch) ([]entities.T
 	args = append(args, terms.Limit)
 
 	fmt.Print(query)
-	rows, err := r.DB.Query(query, args...)
+	rows, err := r.DB.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -96,8 +97,8 @@ func (r *SQLiteTaskRepository) GetTasks(terms entities.TaskSearch) ([]entities.T
 	return tasks, nil
 }
 
-func (r *SQLiteTaskRepository) GetTaskByID(id int, userID int) (entities.Task, error) {
-	result, err := r.DB.Query("SELECT * FROM tasks WHERE id = $1 AND user_id = $2", id, userID)
+func (r *SQLiteTaskRepository) GetTaskByID(ctx context.Context, id int, userID int) (entities.Task, error) {
+	result, err := r.DB.QueryContext(ctx, "SELECT * FROM tasks WHERE id = $1 AND user_id = $2", id, userID)
 
 	if err != nil {
 		return entities.Task{}, entities.ErrDatabaseFailed
@@ -117,8 +118,8 @@ func (r *SQLiteTaskRepository) GetTaskByID(id int, userID int) (entities.Task, e
 	return entities.Task{}, entities.ErrNotFound
 }
 
-func (r *SQLiteTaskRepository) UpdateTask(taskUpdates entities.Task, taskID int, userID int) (entities.Task, error) {
-	result, err := r.DB.Exec("UPDATE tasks SET title = $1, description = $2, priority = $3, dueDate = $4 WHERE id = $5 AND user_id = $6",
+func (r *SQLiteTaskRepository) UpdateTask(ctx context.Context, taskUpdates entities.Task, taskID int, userID int) (entities.Task, error) {
+	result, err := r.DB.ExecContext(ctx, "UPDATE tasks SET title = $1, description = $2, priority = $3, dueDate = $4 WHERE id = $5 AND user_id = $6",
 		taskUpdates.Title, taskUpdates.Description, taskUpdates.Priority, taskUpdates.DueDate, taskID, userID)
 
 	if err != nil {
@@ -136,8 +137,8 @@ func (r *SQLiteTaskRepository) UpdateTask(taskUpdates entities.Task, taskID int,
 	return taskUpdates, nil
 }
 
-func (r *SQLiteTaskRepository) DeleteTask(id int, userID int) (int64, error) {
-	result, err := r.DB.Exec("DELETE FROM tasks WHERE id = $1 AND user_id = $2", id, userID)
+func (r *SQLiteTaskRepository) DeleteTask(ctx context.Context, id int, userID int) (int64, error) {
+	result, err := r.DB.ExecContext(ctx, "DELETE FROM tasks WHERE id = $1 AND user_id = $2", id, userID)
 
 	if err != nil {
 		return 0, err
@@ -150,8 +151,8 @@ func (r *SQLiteTaskRepository) DeleteTask(id int, userID int) (int64, error) {
 	return result.RowsAffected()
 }
 
-func (r *SQLiteTaskRepository) MarkTaskAsDone(id int, userID int) (int64, error) {
-	result, err := r.DB.Exec("UPDATE tasks SET completed = $1 WHERE id = $2 AND  user_id = $3", true, id, userID)
+func (r *SQLiteTaskRepository) MarkTaskAsDone(ctx context.Context, id int, userID int) (int64, error) {
+	result, err := r.DB.ExecContext(ctx, "UPDATE tasks SET completed = $1 WHERE id = $2 AND  user_id = $3", true, id, userID)
 	if err != nil {
 		return 0, err
 	}

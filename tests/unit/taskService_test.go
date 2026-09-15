@@ -1,12 +1,13 @@
 package tests
 
 import (
+	"context"
 	"errors"
 	"testing"
 	"time"
 
-	entities "backendGo/internal/domain"
-	service "backendGo/internal/service"
+	entities "github.com/Diogo1080/GoLearning-TaskMicroService/internal/domain"
+	service "github.com/Diogo1080/GoLearning-TaskMicroService/internal/service"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -18,7 +19,7 @@ type MockTaskRepo struct {
 	mock.Mock
 }
 
-func (m *MockTaskRepo) CreateTask(task entities.Task) (entities.Task, error) {
+func (m *MockTaskRepo) CreateTask(ctx context.Context, task entities.Task) (entities.Task, error) {
 	args := m.Called(task)
 	if args.Get(0) == nil {
 		return entities.Task{}, args.Error(1)
@@ -26,7 +27,7 @@ func (m *MockTaskRepo) CreateTask(task entities.Task) (entities.Task, error) {
 	return args.Get(0).(entities.Task), args.Error(1)
 }
 
-func (m *MockTaskRepo) GetTasks(terms entities.TaskSearch) ([]entities.Task, error) {
+func (m *MockTaskRepo) GetTasks(ctx context.Context, terms entities.TaskSearch) ([]entities.Task, error) {
 	args := m.Called(terms)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
@@ -34,7 +35,7 @@ func (m *MockTaskRepo) GetTasks(terms entities.TaskSearch) ([]entities.Task, err
 	return args.Get(0).([]entities.Task), args.Error(1)
 }
 
-func (m *MockTaskRepo) GetTaskByID(id int, userID int) (entities.Task, error) {
+func (m *MockTaskRepo) GetTaskByID(ctx context.Context, id int, userID int) (entities.Task, error) {
 	args := m.Called(id)
 	if args.Get(0) == nil {
 		return entities.Task{}, args.Error(1)
@@ -42,7 +43,7 @@ func (m *MockTaskRepo) GetTaskByID(id int, userID int) (entities.Task, error) {
 	return args.Get(0).(entities.Task), args.Error(1)
 }
 
-func (m *MockTaskRepo) UpdateTask(task entities.Task, id int, userID int) (entities.Task, error) {
+func (m *MockTaskRepo) UpdateTask(ctx context.Context, task entities.Task, id int, userID int) (entities.Task, error) {
 	args := m.Called(task, id)
 	if args.Get(0) == nil {
 		return entities.Task{}, args.Error(1)
@@ -50,12 +51,12 @@ func (m *MockTaskRepo) UpdateTask(task entities.Task, id int, userID int) (entit
 	return args.Get(0).(entities.Task), args.Error(1)
 }
 
-func (m *MockTaskRepo) DeleteTask(id int, userID int) (int64, error) {
+func (m *MockTaskRepo) DeleteTask(ctx context.Context, id int, userID int) (int64, error) {
 	args := m.Called(id)
 	return args.Get(0).(int64), args.Error(1)
 }
 
-func (m *MockTaskRepo) MarkTaskAsDone(id int, userID int) (int64, error) {
+func (m *MockTaskRepo) MarkTaskAsDone(ctx context.Context, id int, userID int) (int64, error) {
 	args := m.Called(id)
 	return args.Get(0).(int64), args.Error(1)
 }
@@ -109,7 +110,7 @@ func TestTaskService_CreateTask(t *testing.T) {
 			svc := service.NewTaskService(mockRepo)
 
 			// Act
-			got, err := svc.CreateTask(tt.input)
+			got, err := svc.CreateTask(t.Context(), tt.input)
 
 			// Assert
 			if tt.wantErr {
@@ -169,7 +170,7 @@ func TestTaskService_GetTaskByID(t *testing.T) {
 			tt.setupMock(mockRepo)
 
 			svc := service.NewTaskService(mockRepo)
-			got, err := svc.GetTaskByID(tt.input, tt.userID)
+			got, err := svc.GetTaskByID(t.Context(), tt.input, tt.userID)
 
 			if tt.wantErr {
 				assert.Error(t, err)
@@ -220,7 +221,7 @@ func TestTaskService_MarkTaskAsDone(t *testing.T) {
 			tt.setupMock(mockRepo)
 
 			svc := service.NewTaskService(mockRepo)
-			rows, err := svc.MarkTaskAsDone(tt.input, tt.userID)
+			rows, err := svc.MarkTaskAsDone(t.Context(), tt.input, tt.userID)
 
 			assert.Equal(t, tt.wantRows, rows)
 			if tt.wantErr {

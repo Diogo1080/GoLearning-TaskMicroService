@@ -2,6 +2,7 @@ package tests
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -9,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	entities "backendGo/internal/domain"
-	server "backendGo/internal/transport/http"
+	entities "github.com/Diogo1080/GoLearning-TaskMicroService/internal/domain"
+	server "github.com/Diogo1080/GoLearning-TaskMicroService/internal/transport/http"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
@@ -22,7 +23,7 @@ type MockTaskService struct {
 	mock.Mock
 }
 
-func (m *MockTaskService) CreateTask(task entities.Task) (entities.Task, error) {
+func (m *MockTaskService) CreateTask(ctx context.Context, task entities.Task) (entities.Task, error) {
 	args := m.Called(task)
 	if args.Get(0) == nil {
 		return entities.Task{}, args.Error(1)
@@ -30,7 +31,7 @@ func (m *MockTaskService) CreateTask(task entities.Task) (entities.Task, error) 
 	return args.Get(0).(entities.Task), args.Error(1)
 }
 
-func (m *MockTaskService) GetTasks(terms entities.TaskSearch) ([]entities.Task, error) {
+func (m *MockTaskService) GetTasks(ctx context.Context, terms entities.TaskSearch) ([]entities.Task, error) {
 	args := m.Called(terms)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
@@ -38,7 +39,7 @@ func (m *MockTaskService) GetTasks(terms entities.TaskSearch) ([]entities.Task, 
 	return args.Get(0).([]entities.Task), args.Error(1)
 }
 
-func (m *MockTaskService) GetTaskByID(id int, userID int) (entities.Task, error) {
+func (m *MockTaskService) GetTaskByID(ctx context.Context, id int, userID int) (entities.Task, error) {
 	args := m.Called(id)
 	if args.Get(0) == nil {
 		return entities.Task{}, args.Error(1)
@@ -46,7 +47,7 @@ func (m *MockTaskService) GetTaskByID(id int, userID int) (entities.Task, error)
 	return args.Get(0).(entities.Task), args.Error(1)
 }
 
-func (m *MockTaskService) UpdateTask(task entities.Task, id int, userID int) (entities.Task, error) {
+func (m *MockTaskService) UpdateTask(ctx context.Context, task entities.Task, id int, userID int) (entities.Task, error) {
 	args := m.Called(task, id)
 	if args.Get(0) == nil {
 		return entities.Task{}, args.Error(1)
@@ -54,12 +55,12 @@ func (m *MockTaskService) UpdateTask(task entities.Task, id int, userID int) (en
 	return args.Get(0).(entities.Task), args.Error(1)
 }
 
-func (m *MockTaskService) DeleteTask(id int, userID int) error {
+func (m *MockTaskService) DeleteTask(ctx context.Context, id int, userID int) error {
 	args := m.Called(id)
 	return args.Error(1)
 }
 
-func (m *MockTaskService) MarkTaskAsDone(id int, userID int) (int, error) {
+func (m *MockTaskService) MarkTaskAsDone(ctx context.Context, id int, userID int) (int, error) {
 	args := m.Called(id)
 	return args.Get(0).(int), args.Error(1)
 }
@@ -181,19 +182,19 @@ func TestTaskHandler_GetTasks(t *testing.T) {
 			name:        "returns all tasks with default limit",
 			queryParams: "",
 			setupMock: func(svc *MockTaskService) {
-				svc.On("GetTasks", entities.TaskSearch{}, 100).Return([]entities.Task{
+				svc.On("GetTasks", entities.TaskSearch{Limit: 100}).Return([]entities.Task{
 					{ID: 1, Title: "Task 1", DueDate: time.Now()},
 					{ID: 2, Title: "Task 2", DueDate: time.Now()},
 				}, nil)
 			},
-			wantStatus: http.StatusFound,
+			wantStatus: http.StatusOK,
 			taskCount:  2,
 		},
 		{
 			name:        "returns no tasks with default limit",
 			queryParams: "",
 			setupMock: func(svc *MockTaskService) {
-				svc.On("GetTasks", entities.TaskSearch{}, 100).Return([]entities.Task{}, nil)
+				svc.On("GetTasks", entities.TaskSearch{Limit: 100}).Return([]entities.Task{}, nil)
 			},
 			wantStatus: http.StatusOK,
 			taskCount:  0,
@@ -202,12 +203,12 @@ func TestTaskHandler_GetTasks(t *testing.T) {
 			name:        "filters by title and description query param",
 			queryParams: "search=test&limit=10",
 			setupMock: func(svc *MockTaskService) {
-				svc.On("GetTasks", entities.TaskSearch{Search: "test"}, 100).Return([]entities.Task{
+				svc.On("GetTasks", entities.TaskSearch{Search: "test", Limit: 100}).Return([]entities.Task{
 					{ID: 1, Title: "Testing", DueDate: time.Now()},
 					{ID: 2, Title: "Nothing", DueDate: time.Now()},
 				}, nil)
 			},
-			wantStatus: http.StatusFound,
+			wantStatus: http.StatusOK,
 			taskCount:  2,
 		},
 	}

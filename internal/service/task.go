@@ -1,38 +1,26 @@
 package service
 
 import (
-	entities "backendGo/internal/domain"
+	"context"
 	"fmt"
+	"log/slog"
+
+	entities "github.com/Diogo1080/GoLearning-TaskMicroService/internal/domain"
+	"github.com/Diogo1080/GoLearning-TaskMicroService/internal/logger"
 )
 
-/*
-	type TaskCreator interface {
-		CreateTask(task entities.Task) (entities.Task, error)
-	}
-
-	type TaskReader interface {
-		GetTasks(terms entities.TaskSearch, limit int) ([]entities.Task, error)
-		GetTaskByID(id int) (entities.Task, error)
-	}
-
-	type TaskWriter interface {
-		UpdateTask(task entities.Task, id int) (entities.Task, error)
-		DeleteTask(id int) (int64, error)
-		MarkTaskAsDone(id int) (int64, error)
-	}
-*/
-
 type TaskRepository interface {
-	CreateTask(task entities.Task) (entities.Task, error)
-	GetTasks(terms entities.TaskSearch) ([]entities.Task, error)
-	GetTaskByID(id int, userID int) (entities.Task, error)
-	UpdateTask(task entities.Task, id int, userID int) (entities.Task, error)
-	DeleteTask(id int, userID int) (int64, error)
-	MarkTaskAsDone(id int, userID int) (int64, error)
+	CreateTask(ctx context.Context, task entities.Task) (entities.Task, error)
+	GetTasks(ctx context.Context, terms entities.TaskSearch) ([]entities.Task, error)
+	GetTaskByID(ctx context.Context, id int, userID int) (entities.Task, error)
+	UpdateTask(ctx context.Context, task entities.Task, id int, userID int) (entities.Task, error)
+	DeleteTask(ctx context.Context, id int, userID int) (int64, error)
+	MarkTaskAsDone(ctx context.Context, id int, userID int) (int64, error)
 }
 
 type TaskService struct {
-	repo TaskRepository
+	repo   TaskRepository
+	logger *slog.Logger
 }
 
 func NewTaskService(repo TaskRepository) *TaskService {
@@ -42,31 +30,33 @@ func NewTaskService(repo TaskRepository) *TaskService {
 	}
 
 	// Setup
-	svc := &TaskService{repo: repo}
-
+	svc := &TaskService{repo: repo, logger: logger.New().WithGroup("TaskService")}
 	return svc
 }
 
-func (s *TaskService) CreateTask(task entities.Task) (entities.Task, error) {
-	created, err := s.repo.CreateTask(task)
+func (s *TaskService) CreateTask(ctx context.Context, task entities.Task) (entities.Task, error) {
+	s.logger.Info("Attempting to create task", "task", task)
+	created, err := s.repo.CreateTask(ctx, task)
 
 	if err != nil {
+		s.logger.Error("Failed creating task", "error", err)
 		return entities.Task{}, err
 	}
-
+	s.logger.Info("Successful created task")
 	return created, nil
 }
 
-func (s *TaskService) GetTasks(taskTerms entities.TaskSearch) ([]entities.Task, error) {
+func (s *TaskService) GetTasks(ctx context.Context, taskTerms entities.TaskSearch) ([]entities.Task, error) {
+	s.logger.Info("Attempting to get tasks", "terms", taskTerms)
 	empty := make([]entities.Task, 0)
 
-	//Sanatise the
+	//Sanatise the terms
 	err := taskTerms.Sanatise()
 	if err != nil {
 		return empty, entities.ErrBadData
 	}
 
-	tasks, err := s.repo.GetTasks(taskTerms)
+	tasks, err := s.repo.GetTasks(ctx, taskTerms)
 
 	if err != nil {
 		return empty, err
@@ -75,8 +65,8 @@ func (s *TaskService) GetTasks(taskTerms entities.TaskSearch) ([]entities.Task, 
 	return tasks, nil
 }
 
-func (s *TaskService) GetTaskByID(id int, userID int) (entities.Task, error) {
-	task, err := s.repo.GetTaskByID(id, userID)
+func (s *TaskService) GetTaskByID(ctx context.Context, id int, userID int) (entities.Task, error) {
+	task, err := s.repo.GetTaskByID(ctx, id, userID)
 
 	if err != nil {
 		fmt.Print(err)
@@ -90,8 +80,8 @@ func (s *TaskService) GetTaskByID(id int, userID int) (entities.Task, error) {
 	return task, nil
 }
 
-func (s *TaskService) UpdateTask(task entities.Task, taskID int, userID int) (entities.Task, error) {
-	task, err := s.repo.UpdateTask(task, taskID, userID)
+func (s *TaskService) UpdateTask(ctx context.Context, task entities.Task, taskID int, userID int) (entities.Task, error) {
+	task, err := s.repo.UpdateTask(ctx, task, taskID, userID)
 
 	if err != nil {
 		return entities.Task{}, err
@@ -102,8 +92,8 @@ func (s *TaskService) UpdateTask(task entities.Task, taskID int, userID int) (en
 	return task, nil
 }
 
-func (s *TaskService) DeleteTask(id int, userID int) error {
-	_, err := s.repo.DeleteTask(id, userID)
+func (s *TaskService) DeleteTask(ctx context.Context, id int, userID int) error {
+	_, err := s.repo.DeleteTask(ctx, id, userID)
 
 	if err != nil {
 		return err
@@ -112,8 +102,8 @@ func (s *TaskService) DeleteTask(id int, userID int) error {
 	return nil
 }
 
-func (s *TaskService) MarkTaskAsDone(id int, userID int) (int, error) {
-	rows, err := s.repo.MarkTaskAsDone(id, userID)
+func (s *TaskService) MarkTaskAsDone(ctx context.Context, id int, userID int) (int, error) {
+	rows, err := s.repo.MarkTaskAsDone(ctx, id, userID)
 
 	if err != nil {
 		return 0, err

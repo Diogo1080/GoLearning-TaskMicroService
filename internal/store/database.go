@@ -18,6 +18,7 @@ func GetConnectionURL() string {
 	user := os.Getenv("DB_USER")
 	password := os.Getenv("DB_SECRET")
 	dbName := os.Getenv("DB_NAME")
+	fmt.Print(dbName)
 	sslMode := os.Getenv("DB_SSLMODE")
 
 	return fmt.Sprintf(

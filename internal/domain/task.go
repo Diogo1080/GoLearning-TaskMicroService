@@ -23,16 +23,16 @@ type Task struct {
 	Description string    `json:"description,omitempty"`
 	Priority    int       `json:"priority"`
 	Completed   bool      `json:"completed"`
-	DueDate     time.Time `json:"due_date"`
+	DueDate     time.Time `json:"dueDate"`
 }
 
 type TaskDTO struct {
 	ID          int    `form:"id" json:"id"`
 	Title       string `form:"title" json:"title"`
 	Description string `form:"description" json:"description"`
-	Priority    string `form:"priority" json:"priority"`
+	Priority    int    `form:"priority" json:"priority"`
 	Completed   bool   `form:"completed" json:"completed"`
-	DueDate     string `form:"due_date" json:"due_date,omitempty"`
+	DueDate     string `form:"dueDate" json:"dueDate,omitempty"`
 }
 
 func (t *TaskSearch) Sanatise() error {
@@ -48,7 +48,7 @@ func (t *TaskDTO) ToTask() (Task, error) {
 	return Task{
 		Title:       t.Title,
 		Description: t.Description,
-		Priority:    parsePriorityInt(t.Priority),
+		Priority:    t.Priority,
 		Completed:   t.Completed,
 		DueDate:     dueDate,
 	}, nil
@@ -59,7 +59,7 @@ func (t *Task) ToTaskDTO() TaskDTO {
 		ID:          int(t.ID),
 		Title:       t.Title,
 		Description: t.Description,
-		Priority:    parsePriorityString(t.Priority),
+		Priority:    t.Priority,
 		Completed:   t.Completed,
 		DueDate:     parseDateString(t.DueDate),
 	}
@@ -75,29 +75,6 @@ func parsePriorityInt(priority string) int {
 		return 3
 	}
 	return 0
-}
-
-func parsePriorityString(priority int) string {
-	switch priority {
-	case 1:
-		return "low"
-	case 2:
-		return "medium"
-	case 3:
-		return "high"
-	}
-	return ""
-}
-
-func parseCompleted(completed string) bool {
-	switch completed {
-	case "true":
-		return true
-	case "false":
-		return false
-	default:
-		return false
-	}
 }
 
 // parseDate validates and parses a date string into time.Time

@@ -1,43 +1,23 @@
 services:
-  auth-service:
+  task-service:
     env_file:
       - ../.env
     build:
       context: ..
-      dockerfile: docker/Dockerfile.auth
-    container_name: todo-auth-service
+      dockerfile: docker/Dockerfile
+    container_name: task-service
     ports:
-      - "9000:9000"
+      - "8085:8085"
     depends_on:
       postgres:
         condition: service_healthy
-      redis:
-        condition: service_started
-    restart: unless-stopped
-    networks:
-      - todo-network
-
-  web-service:
-    env_file:
-      - ../.env
-    build:
-      context: ..
-      dockerfile: docker/Dockerfile.web
-    container_name: todo-web-service
-    ports:
-      - "8080:8080"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_started
     restart: unless-stopped
     networks:
       - todo-network
 
   postgres:
     image: postgres:15-alpine
-    container_name: todo-postgres
+    container_name: task-postgres
     ports:
       - "${DB_PORT}:${DB_PORT}"
     environment:
@@ -61,23 +41,12 @@ services:
     restart: unless-stopped
     networks:
       - todo-network
-
-  redis:
-    image: redis:7-alpine
-    container_name: todo-redis
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis-data:/data
-    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
-    restart: unless-stopped
-    networks:
-      - todo-network
+      
 
 networks:
   todo-network:
     driver: bridge
+    external: true
 
 volumes:
   postgres-data:
-  redis-data:

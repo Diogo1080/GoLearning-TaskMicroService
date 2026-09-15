@@ -1,19 +1,15 @@
 package http
 
 import (
-	"backendGo/internal/store"
 	"regexp"
 )
 
 type Handlers struct {
-	AuthHandler *AuthHandler
 	TaskHandler *TaskHandler
-	UserHandler *UserHandler
-	rds         *store.Redis
 }
 
-func NewHandlers(taskHandler *TaskHandler, userHandler *UserHandler, authHandler *AuthHandler, rds *store.Redis) *Handlers {
-	return &Handlers{TaskHandler: taskHandler, UserHandler: userHandler, AuthHandler: authHandler, rds: rds}
+func NewHandlers(taskHandler *TaskHandler) *Handlers {
+	return &Handlers{TaskHandler: taskHandler}
 }
 
 func checkId(id string) bool {
@@ -22,5 +18,4 @@ func checkId(id string) bool {
 	}
 
 	return false
-
 }
