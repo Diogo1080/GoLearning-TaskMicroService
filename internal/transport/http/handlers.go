@@ -1,7 +1,9 @@
 package http
 
 import (
-	"regexp"
+	"strconv"
+
+	"github.com/Diogo1080/GoLearning-TaskMicroService/internal/domain"
 )
 
 type Handlers struct {
@@ -13,9 +15,14 @@ func NewHandlers(taskHandler *TaskHandler) *Handlers {
 }
 
 func checkId(id string) bool {
-	if len(id) == 0 || !regexp.MustCompile(`^[0-9]+$`).MatchString(id) {
-		return true
-	}
+	_, err := parseID(id)
+	return err != nil
+}
 
-	return false
+func parseID(id string) (int, error) {
+	parsed, err := strconv.ParseUint(id, 10, strconv.IntSize)
+	if err != nil || parsed == 0 {
+		return 0, domain.ErrBadRequest
+	}
+	return int(parsed), nil
 }

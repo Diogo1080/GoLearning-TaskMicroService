@@ -2,21 +2,20 @@ package http
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"strconv"
 
 	"github.com/Diogo1080/GoLearning-TaskMicroService/internal/domain"
-	entities "github.com/Diogo1080/GoLearning-TaskMicroService/internal/domain"
+	"github.com/Diogo1080/GoLearning-TaskMicroService/internal/transport/http/middleware"
 
 	"github.com/gin-gonic/gin"
 )
 
 type TaskServicePort interface {
-	CreateTask(ctx context.Context, task entities.Task) (entities.Task, error)
-	GetTasks(ctx context.Context, terms entities.TaskSearch) ([]entities.Task, error)
-	GetTaskByID(ctx context.Context, id int, userID int) (entities.Task, error)
-	UpdateTask(ctx context.Context, task entities.Task, taskID int, userID int) (entities.Task, error)
+	CreateTask(ctx context.Context, task domain.Task) (domain.Task, error)
+	GetTasks(ctx context.Context, terms domain.TaskSearch) ([]domain.Task, error)
+	GetTaskByID(ctx context.Context, id int, userID int) (domain.Task, error)
+	UpdateTask(ctx context.Context, task domain.Task, taskID int, userID int) (domain.Task, error)
 	DeleteTask(ctx context.Context, id int, userID int) error
 	MarkTaskAsDone(ctx context.Context, id int, userID int) (int, error)
 }
@@ -30,26 +29,23 @@ func NewTaskHandler(svc TaskServicePort) *TaskHandler {
 }
 
 func (h *TaskHandler) HandleAddTask(c *gin.Context) {
+	logger := middleware.GetLoggerFromContext(c)
+
 	authID := GetUserIDFromContext(c)
 
-	var in entities.Task
+	var in domain.Task
 	if err := c.ShouldBindJSON(&in); err != nil {
-		c.JSON(http.StatusBadRequest, entities.ErrBadData)
-		return
-	}
-
-	err := SanitizeInput(in)
-
-	if err != nil {
-		c.JSON(http.StatusBadRequest, entities.ErrBadData)
+		logger.Info("Failed to bind User")
+		c.JSON(http.StatusBadRequest, domain.ErrBadRequest)
 		return
 	}
 
 	in.UserID = int64(authID)
 
 	task, err := h.svc.CreateTask(c, in)
+
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, entities.ErrInternalServerError)
+		c.JSON(mapDomainError(err))
 		return
 	}
 
@@ -57,8 +53,18 @@ func (h *TaskHandler) HandleAddTask(c *gin.Context) {
 }
 
 func (h *TaskHandler) HandleGetTasks(c *gin.Context) {
+	//logger := middleware.GetLoggerFromContext(c)
+
 	authID := GetUserIDFromContext(c)
-	terms := entities.TaskSearch{
+	var limit int
+
+	limit, err := strconv.Atoi(c.Request.URL.Query().Get("Limit"))
+
+	if err != nil || limit <= 20 {
+		limit = 20
+	}
+
+	terms := domain.TaskSearch{
 		Search:     c.Request.URL.Query().Get("search"),
 		UserID:     int(authID),
 		Priority:   c.Request.URL.Query().Get("priority"),
@@ -66,25 +72,18 @@ func (h *TaskHandler) HandleGetTasks(c *gin.Context) {
 		DueDateMin: c.Request.URL.Query().Get("dueDateMin"),
 		DueDateMax: c.Request.URL.Query().Get("dueDateMax"),
 		OrderBy:    c.Request.URL.Query().Get("orderBy"),
-		Limit:      100,
+		Limit:      limit,
 	}
 
 	tasks, err := h.svc.GetTasks(c, terms)
 
 	if err != nil {
-		if errors.Is(err, entities.ErrBadData) {
-			c.JSON(http.StatusBadRequest, entities.ErrBadData)
-			return
-		}
-
-		c.JSON(http.StatusInternalServerError, entities.ErrInternalServerError)
+		c.JSON(mapDomainError(err))
 		return
 	}
 
 	if len(tasks) == 0 {
-		tasks = []entities.Task{}
-		c.JSON(http.StatusOK, tasks)
-		return
+		tasks = []domain.Task{}
 	}
 
 	c.JSON(http.StatusOK, tasks)
@@ -96,7 +95,7 @@ func (h *TaskHandler) HandleGetTaskById(c *gin.Context) {
 	authID := GetUserIDFromContext(c)
 
 	if checkId(id) {
-		c.JSON(http.StatusBadRequest, entities.ErrBadData)
+		c.JSON(http.StatusBadRequest, domain.ErrBadRequest)
 		return
 	}
 
@@ -105,11 +104,7 @@ func (h *TaskHandler) HandleGetTaskById(c *gin.Context) {
 	task, err := h.svc.GetTaskByID(c, i, int(authID))
 
 	if err != nil {
-		if errors.Is(err, entities.ErrNotFound) {
-			c.JSON(http.StatusNotFound, entities.ErrNotFound)
-			return
-		}
-		c.JSON(http.StatusInternalServerError, entities.ErrInternalServerError)
+		c.JSON(mapDomainError(err))
 		return
 	}
 
@@ -117,35 +112,33 @@ func (h *TaskHandler) HandleGetTaskById(c *gin.Context) {
 }
 
 func (h *TaskHandler) HandleUpdateTask(c *gin.Context) {
+
 	authID := GetUserIDFromContext(c)
 
-	var in entities.Task
+	var in domain.Task
 	id := c.Param("id")
 
 	if checkId(id) {
-		c.JSON(http.StatusBadRequest, entities.ErrBadData)
+		c.JSON(http.StatusBadRequest, domain.ErrBadRequest)
 		return
 	}
 
 	if err := c.ShouldBindJSON(&in); err != nil {
-		c.JSON(http.StatusBadRequest, entities.ErrBadData)
+		c.JSON(http.StatusBadRequest, domain.ErrBadRequest)
 		return
 	}
 
 	taskID, err := strconv.Atoi(id)
 
 	if err != nil {
-		c.JSON(http.StatusBadRequest, entities.ErrBadData)
+		c.JSON(http.StatusBadRequest, domain.ErrBadRequest)
 		return
 	}
 
 	task, err := h.svc.UpdateTask(c, in, taskID, int(authID))
 
 	if err != nil {
-		if errors.Is(err, entities.ErrNotFound) {
-			c.JSON(http.StatusNotFound, entities.ErrNotFound)
-		}
-		c.JSON(http.StatusInternalServerError, entities.ErrDatabaseFailed)
+		c.JSON(mapDomainError(err))
 		return
 	}
 
@@ -158,7 +151,7 @@ func (h *TaskHandler) HandleDeleteTask(c *gin.Context) {
 	id := c.Param("id")
 
 	if checkId(id) {
-		c.JSON(http.StatusBadRequest, entities.ErrBadData)
+		c.JSON(http.StatusBadRequest, domain.ErrBadRequest)
 		return
 	}
 
@@ -167,11 +160,7 @@ func (h *TaskHandler) HandleDeleteTask(c *gin.Context) {
 	err := h.svc.DeleteTask(c, i, int(authID))
 
 	if err != nil {
-		if errors.Is(err, entities.ErrNotFound) {
-			c.JSON(http.StatusNotFound, entities.ErrNotFound)
-			return
-		}
-		c.JSON(http.StatusInternalServerError, entities.ErrInternalServerError)
+		c.JSON(mapDomainError(err))
 		return
 	}
 
@@ -184,7 +173,7 @@ func (h *TaskHandler) HandleCompleteTask(c *gin.Context) {
 	id := c.Param("id")
 
 	if checkId(id) {
-		c.JSON(http.StatusBadRequest, entities.ErrBadData)
+		c.JSON(http.StatusBadRequest, domain.ErrBadRequest)
 		return
 	}
 
@@ -193,11 +182,7 @@ func (h *TaskHandler) HandleCompleteTask(c *gin.Context) {
 	rows, err := h.svc.MarkTaskAsDone(c, i, int(authID))
 
 	if err != nil {
-		if errors.Is(err, entities.ErrNotFound) {
-			c.JSON(http.StatusNotFound, entities.ErrNotFound)
-			return
-		}
-		c.JSON(http.StatusInternalServerError, entities.ErrInternalServerError)
+		c.JSON(mapDomainError(err))
 		return
 	}
 
@@ -210,12 +195,4 @@ func (h *TaskHandler) HandleCompleteTask(c *gin.Context) {
 
 func GetUserIDFromContext(c *gin.Context) int32 {
 	return c.GetInt32("userID")
-}
-
-func SanitizeInput(task domain.Task) error {
-	if len(task.Title) <= 0 {
-		return domain.ErrBadData
-	}
-
-	return nil
 }

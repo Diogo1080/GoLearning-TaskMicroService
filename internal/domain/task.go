@@ -2,6 +2,8 @@ package domain
 
 import (
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -36,10 +38,67 @@ type TaskDTO struct {
 }
 
 func (t *TaskSearch) Sanatise() error {
+	if t.UserID <= 0 {
+		return ErrBadRequest
+	}
+
+	t.Search = strings.TrimSpace(t.Search)
+	if t.Limit <= 0 {
+		t.Limit = 100
+	}
+	if t.Limit > 100 {
+		t.Limit = 100
+	}
+
+	if t.Priority != "" {
+		priority, err := strconv.Atoi(t.Priority)
+		if err != nil || priority < 1 || priority > 3 {
+			return ErrBadRequest
+		}
+		t.Priority = strconv.Itoa(priority)
+	}
+
+	if t.Completed != "" {
+		completed, err := strconv.ParseBool(t.Completed)
+		if err != nil {
+			return ErrBadRequest
+		}
+		t.Completed = strconv.FormatBool(completed)
+	}
+
+	for _, date := range []string{t.DueDateMin, t.DueDateMax} {
+		if date != "" {
+			if _, err := time.Parse("2006-01-02", date); err != nil {
+				return ErrBadRequest
+			}
+		}
+	}
+
+	if t.DueDateMin != "" && t.DueDateMax != "" && t.DueDateMin > t.DueDateMax {
+		return ErrBadRequest
+	}
+
+	if t.OrderBy != "" {
+		switch t.OrderBy {
+		case "dueDate", "priority", "title", "completed":
+		default:
+			return ErrBadRequest
+		}
+	}
+
 	return nil
 }
 
 func (t *TaskDTO) ToTask() (Task, error) {
+	if strings.TrimSpace(t.DueDate) == "" {
+		return Task{
+			Title:       t.Title,
+			Description: t.Description,
+			Priority:    t.Priority,
+			Completed:   t.Completed,
+		}, nil
+	}
+
 	dueDate, err := parseDateTime(t.DueDate)
 	if err != nil {
 		return Task{}, err
@@ -65,18 +124,6 @@ func (t *Task) ToTaskDTO() TaskDTO {
 	}
 }
 
-func parsePriorityInt(priority string) int {
-	switch priority {
-	case "low", "1":
-		return 1
-	case "medium", "2":
-		return 2
-	case "high", "3":
-		return 3
-	}
-	return 0
-}
-
 // parseDate validates and parses a date string into time.Time
 // Accepts format: YYYY-MM-DD (e.g., 2026-06-09)
 func parseDateTime(dateStr string) (time.Time, error) {
@@ -92,4 +139,12 @@ func parseDateTime(dateStr string) (time.Time, error) {
 
 func parseDateString(date time.Time) string {
 	return date.String()
+}
+
+func ValidateTitle(title string) error {
+	if len(strings.TrimSpace(title)) < 2 || len(strings.TrimSpace(title)) > 50 {
+		return ErrBadRequest
+	}
+
+	return nil
 }

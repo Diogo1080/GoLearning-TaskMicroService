@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strings"
 
-	entities "github.com/Diogo1080/GoLearning-TaskMicroService/internal/domain"
+	"github.com/Diogo1080/GoLearning-TaskMicroService/internal/domain"
 	identity "github.com/Diogo1080/GoLearning-TaskMicroService/internal/identity"
 	"github.com/Diogo1080/GoLearning-TaskMicroService/internal/logger"
 
@@ -31,7 +31,7 @@ func (b *IdentityMiddlewareBuilder) Build() gin.HandlerFunc {
 		}
 
 		if tokenStr == "" {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, entities.ErrUnauthorized)
+			c.AbortWithStatusJSON(http.StatusUnauthorized, domain.ErrUnauthorized)
 			return
 		}
 
@@ -39,7 +39,7 @@ func (b *IdentityMiddlewareBuilder) Build() gin.HandlerFunc {
 		resp, err := b.IdentityClient.ValidateToken(ctx, tokenStr)
 
 		if err != nil || resp.UserId == 0 {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, entities.ErrUnauthorized)
+			c.AbortWithStatusJSON(http.StatusUnauthorized, domain.ErrUnauthorized)
 			return
 		}
 

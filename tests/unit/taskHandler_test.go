@@ -203,7 +203,7 @@ func TestTaskHandler_GetTasks(t *testing.T) {
 			name:        "filters by title and description query param",
 			queryParams: "search=test&limit=10",
 			setupMock: func(svc *MockTaskService) {
-				svc.On("GetTasks", entities.TaskSearch{Search: "test", Limit: 100}).Return([]entities.Task{
+				svc.On("GetTasks", entities.TaskSearch{Search: "test", Limit: 10}).Return([]entities.Task{
 					{ID: 1, Title: "Testing", DueDate: time.Now()},
 					{ID: 2, Title: "Nothing", DueDate: time.Now()},
 				}, nil)

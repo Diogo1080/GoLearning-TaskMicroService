@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strconv"
+	"time"
 
 	entities "github.com/Diogo1080/GoLearning-TaskMicroService/internal/domain"
 )
@@ -17,8 +19,12 @@ func NewSQLiteTaskRepository(db *sql.DB) *SQLiteTaskRepository {
 }
 
 func (r *SQLiteTaskRepository) CreateTask(ctx context.Context, task entities.Task) (entities.Task, error) {
+	var dueDate interface{}
+	if !task.DueDate.IsZero() {
+		dueDate = task.DueDate
+	}
 	err := r.DB.QueryRowContext(ctx, "INSERT INTO tasks (user_id, title, description, priority, completed, dueDate) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id",
-		task.UserID, task.Title, task.Description, task.Priority, task.Completed, task.DueDate).Scan(&task.ID)
+		task.UserID, task.Title, task.Description, task.Priority, task.Completed, dueDate).Scan(&task.ID)
 
 	if err != nil {
 		return entities.Task{}, err
@@ -28,6 +34,10 @@ func (r *SQLiteTaskRepository) CreateTask(ctx context.Context, task entities.Tas
 }
 
 func (r *SQLiteTaskRepository) GetTasks(ctx context.Context, terms entities.TaskSearch) ([]entities.Task, error) {
+	if err := terms.Sanatise(); err != nil {
+		return nil, err
+	}
+
 	i := int(1)
 	query := "SELECT * FROM tasks "
 	args := []interface{}{}
@@ -44,32 +54,40 @@ func (r *SQLiteTaskRepository) GetTasks(ctx context.Context, terms entities.Task
 
 	if terms.Priority != "" {
 		query += "AND priority = $" + fmt.Sprint(i) + " "
-		args = append(args, terms.Priority)
+		priority, _ := strconv.Atoi(terms.Priority)
+		args = append(args, priority)
 		i++
 	}
 
 	if terms.Completed != "" {
 		query += "AND completed = $" + fmt.Sprint(i) + " "
-		args = append(args, terms.Completed)
+		completed, _ := strconv.ParseBool(terms.Completed)
+		args = append(args, completed)
 		i++
 	}
 
 	if terms.DueDateMax != "" {
 		query += "AND dueDate < $" + fmt.Sprint(i) + " "
-		args = append(args, terms.DueDateMax)
+		date, _ := time.Parse("2006-01-02", terms.DueDateMax)
+		args = append(args, date)
 		i++
 	}
 
 	if terms.DueDateMin != "" {
 		query += "AND dueDate > $" + fmt.Sprint(i) + " "
-		args = append(args, terms.DueDateMin)
+		date, _ := time.Parse("2006-01-02", terms.DueDateMin)
+		args = append(args, date)
 		i++
 	}
 
 	if terms.OrderBy != "" {
-		query += "ORDER BY $" + fmt.Sprint(i) + " "
-		args = append(args, terms.OrderBy)
-		i++
+		orderBy := map[string]string{
+			"dueDate":   "dueDate",
+			"priority":  "priority",
+			"title":     "title",
+			"completed": "completed",
+		}[terms.OrderBy]
+		query += "ORDER BY " + orderBy + " "
 	} else {
 		query += "ORDER BY dueDate "
 	}
@@ -77,7 +95,6 @@ func (r *SQLiteTaskRepository) GetTasks(ctx context.Context, terms entities.Task
 	query += "Limit $" + fmt.Sprint(i) + " "
 	args = append(args, terms.Limit)
 
-	fmt.Print(query)
 	rows, err := r.DB.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
@@ -93,6 +110,9 @@ func (r *SQLiteTaskRepository) GetTasks(ctx context.Context, terms entities.Task
 		}
 		tasks = append(tasks, task)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 
 	return tasks, nil
 }
@@ -101,7 +121,7 @@ func (r *SQLiteTaskRepository) GetTaskByID(ctx context.Context, id int, userID i
 	result, err := r.DB.QueryContext(ctx, "SELECT * FROM tasks WHERE id = $1 AND user_id = $2", id, userID)
 
 	if err != nil {
-		return entities.Task{}, entities.ErrDatabaseFailed
+		return entities.Task{}, entities.ErrInternal
 	}
 
 	defer result.Close()
@@ -119,16 +139,18 @@ func (r *SQLiteTaskRepository) GetTaskByID(ctx context.Context, id int, userID i
 }
 
 func (r *SQLiteTaskRepository) UpdateTask(ctx context.Context, taskUpdates entities.Task, taskID int, userID int) (entities.Task, error) {
+	var dueDate interface{}
+	if !taskUpdates.DueDate.IsZero() {
+		dueDate = taskUpdates.DueDate
+	}
 	result, err := r.DB.ExecContext(ctx, "UPDATE tasks SET title = $1, description = $2, priority = $3, dueDate = $4 WHERE id = $5 AND user_id = $6",
-		taskUpdates.Title, taskUpdates.Description, taskUpdates.Priority, taskUpdates.DueDate, taskID, userID)
+		taskUpdates.Title, taskUpdates.Description, taskUpdates.Priority, dueDate, taskID, userID)
 
 	if err != nil {
 		return entities.Task{}, err
 	}
 
 	affected, err := result.RowsAffected()
-
-	fmt.Print(affected)
 
 	if affected == int64(0) {
 		return entities.Task{}, entities.ErrNotFound
