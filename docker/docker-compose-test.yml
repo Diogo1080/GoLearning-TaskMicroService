@@ -35,7 +35,6 @@ services:
       - POSTGRES_DB=task-test
     volumes:
       - postgres-task-test-data:/var/lib/postgresql/data
-      - ./init-db.sql:/docker-entrypoint-initdb.d/10-init-db.sql
     command: |
       postgres 
         -c max_connections=200 

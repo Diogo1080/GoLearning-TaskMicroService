@@ -184,6 +184,46 @@ func TestTaskService_GetTaskByID(t *testing.T) {
 	}
 }
 
+func TestTaskService_GetTasks_PreservesPage(t *testing.T) {
+	mockRepo := new(MockTaskRepo)
+	mockRepo.On("GetTasks", entities.TaskSearch{
+		UserID: 1,
+		Limit:  10,
+		Offset: 3,
+	}).Return([]entities.Task{{ID: 21}}, nil)
+
+	svc := service.NewTaskService(mockRepo)
+	tasks, err := svc.GetTasks(t.Context(), entities.TaskSearch{
+		UserID: 1,
+		Limit:  10,
+		Offset: 3,
+	})
+
+	assert.NoError(t, err)
+	assert.Len(t, tasks, 1)
+	assert.Equal(t, int64(21), tasks[0].ID)
+	mockRepo.AssertExpectations(t)
+}
+
+func TestTaskService_GetTasks_DefaultsToFirstPage(t *testing.T) {
+	mockRepo := new(MockTaskRepo)
+	mockRepo.On("GetTasks", entities.TaskSearch{
+		UserID: 1,
+		Limit:  10,
+		Offset: 1,
+	}).Return([]entities.Task{}, nil)
+
+	svc := service.NewTaskService(mockRepo)
+	tasks, err := svc.GetTasks(t.Context(), entities.TaskSearch{
+		UserID: 1,
+		Limit:  10,
+	})
+
+	assert.NoError(t, err)
+	assert.Empty(t, tasks)
+	mockRepo.AssertExpectations(t)
+}
+
 func TestTaskService_MarkTaskAsDone(t *testing.T) {
 	tests := []struct {
 		name      string

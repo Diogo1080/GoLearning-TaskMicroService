@@ -5,5 +5,5 @@ CREATE TABLE IF NOT EXISTS tasks (
     description TEXT,
     priority INTEGER NOT NULL,
     completed BOOLEAN NOT NULL,
-    dueDate Date
+    due_date DATE
 );

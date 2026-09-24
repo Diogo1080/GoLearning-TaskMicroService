@@ -96,12 +96,17 @@ func (h *TaskHandler) HandleGetTasks(c *gin.Context) {
 	//logger := middleware.GetLoggerFromContext(c)
 
 	authID := GetUserIDFromContext(c)
-	var limit int
+	var limit, offset int
 
 	limit, err := strconv.Atoi(c.Request.URL.Query().Get("limit"))
 
 	if err != nil || limit <= 0 {
 		limit = 20
+	}
+
+	offset, err = strconv.Atoi(c.Request.URL.Query().Get("offset"))
+	if err != nil || offset < 1 {
+		offset = 1
 	}
 
 	terms := domain.TaskSearch{
@@ -113,6 +118,7 @@ func (h *TaskHandler) HandleGetTasks(c *gin.Context) {
 		DueDateMax: c.Request.URL.Query().Get("dueDateMax"),
 		OrderBy:    c.Request.URL.Query().Get("orderBy"),
 		Limit:      limit,
+		Offset:     offset,
 	}
 
 	tasks, err := h.svc.GetTasks(c, terms)

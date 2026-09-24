@@ -1,4 +1,8 @@
-.PHONY: build up down logs clean rebuild
+.PHONY: build up down logs clean rebuild migrate-up
+
+# Apply all pending database migrations using the configured environment.
+migrate-up:
+	go run ./cmd/migrate
 
 # Build all services
 build:

@@ -182,7 +182,7 @@ func TestTaskHandler_GetTasks(t *testing.T) {
 			name:        "returns all tasks with default limit",
 			queryParams: "",
 			setupMock: func(svc *MockTaskService) {
-				svc.On("GetTasks", entities.TaskSearch{Limit: 20}).Return([]entities.Task{
+				svc.On("GetTasks", entities.TaskSearch{Limit: 20, Offset: 1}).Return([]entities.Task{
 					{ID: 1, Title: "Task 1", DueDate: time.Now()},
 					{ID: 2, Title: "Task 2", DueDate: time.Now()},
 				}, nil)
@@ -194,16 +194,36 @@ func TestTaskHandler_GetTasks(t *testing.T) {
 			name:        "returns no tasks with default limit",
 			queryParams: "",
 			setupMock: func(svc *MockTaskService) {
-				svc.On("GetTasks", entities.TaskSearch{Limit: 20}).Return([]entities.Task{}, nil)
+				svc.On("GetTasks", entities.TaskSearch{Limit: 20, Offset: 1}).Return([]entities.Task{}, nil)
+			},
+			wantStatus: http.StatusOK,
+			taskCount:  0,
+		},
+		{
+			name:        "uses the requested page",
+			queryParams: "limit=5&offset=3",
+			setupMock: func(svc *MockTaskService) {
+				svc.On("GetTasks", entities.TaskSearch{Limit: 5, Offset: 3}).Return([]entities.Task{
+					{ID: 11, Title: "Task 11"},
+				}, nil)
+			},
+			wantStatus: http.StatusOK,
+			taskCount:  1,
+		},
+		{
+			name:        "defaults invalid page to the first page",
+			queryParams: "limit=5&offset=invalid",
+			setupMock: func(svc *MockTaskService) {
+				svc.On("GetTasks", entities.TaskSearch{Limit: 5, Offset: 1}).Return([]entities.Task{}, nil)
 			},
 			wantStatus: http.StatusOK,
 			taskCount:  0,
 		},
 		{
 			name:        "filters by title and description query param and limit",
-			queryParams: "search=test&limit=10",
+			queryParams: "search=test&limit=10&offset=2",
 			setupMock: func(svc *MockTaskService) {
-				svc.On("GetTasks", entities.TaskSearch{Search: "test", Limit: 10}).Return([]entities.Task{
+				svc.On("GetTasks", entities.TaskSearch{Search: "test", Limit: 10, Offset: 2}).Return([]entities.Task{
 					{ID: 1, Title: "Testing", DueDate: time.Now()},
 					{ID: 2, Title: "Nothing", DueDate: time.Now()},
 				}, nil)

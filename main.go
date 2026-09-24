@@ -27,6 +27,10 @@ func main() {
 	}
 	defer db.Close()
 
+	if err := store.RunMigrations(db); err != nil {
+		log.Fatalf("Failed to apply database migrations: %v", err)
+	}
+
 	r := gin.Default()
 
 	// Connect to Auth gRPC service

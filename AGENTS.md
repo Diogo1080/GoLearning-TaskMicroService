@@ -25,7 +25,7 @@
 - `godotenv.Load("../.env")` is relative to the process working directory. Verify the working directory or environment variables before treating missing configuration as an application bug.
 - Integration tests in `tests/integration` expect the task service at `localhost:8083` and the identity service at `localhost:8081`; both services must be running and seeded as required by their own repositories.
 - Test Compose requires the external Docker network `todo-test-network` and an already available identity service. Production Compose similarly requires `todo-network`; neither Compose file starts the identity service.
-- Database schema initialization comes from `docker/init-db.sql` when the PostgreSQL volume is first created. Recreate the volume when testing schema changes.
+- Database schema changes are applied by embedded `golang-migrate` migrations during service startup. Use `make migrate-up` for explicit migration runs.
 
 ## HTTP contract
 
@@ -38,5 +38,5 @@
 
 - Make focused changes and preserve existing public APIs unless the task requires a contract change.
 - Add or update unit tests for handler/service behavior; use integration tests only when the change crosses the database, HTTP, or identity-service boundary.
-- For database changes, update `docker/init-db.sql` and verify behavior against a fresh PostgreSQL volume.
+- For database changes, add ordered up/down migrations under `internal/store/migrations` and verify behavior against an empty database and the previous migration version.
 - Run `gofmt` and the narrowest relevant test command before broader validation. Inspect `go test ./...` failures for missing external-service prerequisites before changing production code.

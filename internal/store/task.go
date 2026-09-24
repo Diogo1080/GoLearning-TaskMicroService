@@ -23,7 +23,7 @@ func (r *SQLiteTaskRepository) CreateTask(ctx context.Context, task entities.Tas
 	if !task.DueDate.IsZero() {
 		dueDate = task.DueDate
 	}
-	err := r.DB.QueryRowContext(ctx, "INSERT INTO tasks (user_id, title, description, priority, completed, dueDate) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id",
+	err := r.DB.QueryRowContext(ctx, "INSERT INTO tasks (user_id, title, description, priority, completed, due_date) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id",
 		task.UserID, task.Title, task.Description, task.Priority, task.Completed, dueDate).Scan(&task.ID)
 
 	if err != nil {
@@ -67,14 +67,14 @@ func (r *SQLiteTaskRepository) GetTasks(ctx context.Context, terms entities.Task
 	}
 
 	if terms.DueDateMax != "" {
-		query += "AND dueDate < $" + fmt.Sprint(i) + " "
+		query += "AND due_date < $" + fmt.Sprint(i) + " "
 		date, _ := time.Parse("2006-01-02", terms.DueDateMax)
 		args = append(args, date)
 		i++
 	}
 
 	if terms.DueDateMin != "" {
-		query += "AND dueDate > $" + fmt.Sprint(i) + " "
+		query += "AND due_date > $" + fmt.Sprint(i) + " "
 		date, _ := time.Parse("2006-01-02", terms.DueDateMin)
 		args = append(args, date)
 		i++
@@ -82,18 +82,22 @@ func (r *SQLiteTaskRepository) GetTasks(ctx context.Context, terms entities.Task
 
 	if terms.OrderBy != "" {
 		orderBy := map[string]string{
-			"dueDate":   "dueDate",
+			"dueDate":   "due_date",
 			"priority":  "priority",
 			"title":     "title",
 			"completed": "completed",
 		}[terms.OrderBy]
 		query += "ORDER BY " + orderBy + " "
 	} else {
-		query += "ORDER BY dueDate "
+		query += "ORDER BY due_date "
 	}
 
 	query += "Limit $" + fmt.Sprint(i) + " "
 	args = append(args, terms.Limit)
+	i++
+
+	query += "OFFSET $" + fmt.Sprint(i) + " "
+	args = append(args, (terms.Offset-1)*terms.Limit)
 
 	rows, err := r.DB.QueryContext(ctx, query, args...)
 	if err != nil {
@@ -104,9 +108,13 @@ func (r *SQLiteTaskRepository) GetTasks(ctx context.Context, terms entities.Task
 	var tasks []entities.Task
 	for rows.Next() {
 		var task entities.Task
-		err = rows.Scan(&task.ID, &task.UserID, &task.Title, &task.Description, &task.Priority, &task.Completed, &task.DueDate)
+		var dueDate sql.NullTime
+		err = rows.Scan(&task.ID, &task.UserID, &task.Title, &task.Description, &task.Priority, &task.Completed, &dueDate)
 		if err != nil {
 			return nil, err
+		}
+		if dueDate.Valid {
+			task.DueDate = dueDate.Time
 		}
 		tasks = append(tasks, task)
 	}
@@ -128,9 +136,13 @@ func (r *SQLiteTaskRepository) GetTaskByID(ctx context.Context, id int, userID i
 
 	if result.Next() {
 		var task entities.Task
-		err := result.Scan(&task.ID, &task.UserID, &task.Title, &task.Description, &task.Priority, &task.Completed, &task.DueDate)
+		var dueDate sql.NullTime
+		err := result.Scan(&task.ID, &task.UserID, &task.Title, &task.Description, &task.Priority, &task.Completed, &dueDate)
 		if err != nil {
 			return entities.Task{}, err
+		}
+		if dueDate.Valid {
+			task.DueDate = dueDate.Time
 		}
 		return task, nil
 	}
@@ -143,7 +155,7 @@ func (r *SQLiteTaskRepository) UpdateTask(ctx context.Context, taskUpdates entit
 	if !taskUpdates.DueDate.IsZero() {
 		dueDate = taskUpdates.DueDate
 	}
-	result, err := r.DB.ExecContext(ctx, "UPDATE tasks SET title = $1, description = $2, priority = $3, dueDate = $4 WHERE id = $5 AND user_id = $6",
+	result, err := r.DB.ExecContext(ctx, "UPDATE tasks SET title = $1, description = $2, priority = $3, due_date = $4 WHERE id = $5 AND user_id = $6",
 		taskUpdates.Title, taskUpdates.Description, taskUpdates.Priority, dueDate, taskID, userID)
 
 	if err != nil {

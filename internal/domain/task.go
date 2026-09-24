@@ -15,6 +15,7 @@ type TaskSearch struct {
 	DueDateMax string
 	OrderBy    string
 	Limit      int
+	Offset     int
 }
 
 type Task struct {
@@ -38,6 +39,9 @@ func (t *TaskSearch) Sanatise() error {
 	}
 	if t.Limit > 100 {
 		t.Limit = 100
+	}
+	if t.Offset <= 0 {
+		t.Offset = 1
 	}
 
 	if t.Priority != "" {
