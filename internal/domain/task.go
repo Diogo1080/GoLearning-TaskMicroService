@@ -1,7 +1,6 @@
 package domain
 
 import (
-	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -19,22 +18,13 @@ type TaskSearch struct {
 }
 
 type Task struct {
-	ID          int64     `json:"id"`
-	UserID      int64     `json:"-"`
-	Title       string    `json:"title"`
-	Description string    `json:"description,omitempty"`
-	Priority    int       `json:"priority"`
-	Completed   bool      `json:"completed"`
-	DueDate     time.Time `json:"dueDate"`
-}
-
-type TaskDTO struct {
-	ID          int    `form:"id" json:"id"`
-	Title       string `form:"title" json:"title"`
-	Description string `form:"description" json:"description"`
-	Priority    int    `form:"priority" json:"priority"`
-	Completed   bool   `form:"completed" json:"completed"`
-	DueDate     string `form:"dueDate" json:"dueDate,omitempty"`
+	ID          int64
+	UserID      int64
+	Title       string
+	Description string
+	Priority    int
+	Completed   bool
+	DueDate     time.Time
 }
 
 func (t *TaskSearch) Sanatise() error {
@@ -87,58 +77,6 @@ func (t *TaskSearch) Sanatise() error {
 	}
 
 	return nil
-}
-
-func (t *TaskDTO) ToTask() (Task, error) {
-	if strings.TrimSpace(t.DueDate) == "" {
-		return Task{
-			Title:       t.Title,
-			Description: t.Description,
-			Priority:    t.Priority,
-			Completed:   t.Completed,
-		}, nil
-	}
-
-	dueDate, err := parseDateTime(t.DueDate)
-	if err != nil {
-		return Task{}, err
-	}
-
-	return Task{
-		Title:       t.Title,
-		Description: t.Description,
-		Priority:    t.Priority,
-		Completed:   t.Completed,
-		DueDate:     dueDate,
-	}, nil
-}
-
-func (t *Task) ToTaskDTO() TaskDTO {
-	return TaskDTO{
-		ID:          int(t.ID),
-		Title:       t.Title,
-		Description: t.Description,
-		Priority:    t.Priority,
-		Completed:   t.Completed,
-		DueDate:     parseDateString(t.DueDate),
-	}
-}
-
-// parseDate validates and parses a date string into time.Time
-// Accepts format: YYYY-MM-DD (e.g., 2026-06-09)
-func parseDateTime(dateStr string) (time.Time, error) {
-	const dateFormat = "2006-01-02" // Go reference date: Mon Jan 2 15:04:05 MST 2006
-
-	parsed, err := time.Parse(dateFormat, dateStr)
-	if err != nil {
-		return time.Time{}, fmt.Errorf("invalid due date format: '%s'. Use YYYY-MM-DD (e.g., 2026-06-09)", dateStr)
-	}
-
-	return parsed.Local(), nil
-}
-
-func parseDateString(date time.Time) string {
-	return date.String()
 }
 
 func ValidateTitle(title string) error {

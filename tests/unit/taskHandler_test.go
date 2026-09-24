@@ -182,7 +182,7 @@ func TestTaskHandler_GetTasks(t *testing.T) {
 			name:        "returns all tasks with default limit",
 			queryParams: "",
 			setupMock: func(svc *MockTaskService) {
-				svc.On("GetTasks", entities.TaskSearch{Limit: 100}).Return([]entities.Task{
+				svc.On("GetTasks", entities.TaskSearch{Limit: 20}).Return([]entities.Task{
 					{ID: 1, Title: "Task 1", DueDate: time.Now()},
 					{ID: 2, Title: "Task 2", DueDate: time.Now()},
 				}, nil)
@@ -194,13 +194,13 @@ func TestTaskHandler_GetTasks(t *testing.T) {
 			name:        "returns no tasks with default limit",
 			queryParams: "",
 			setupMock: func(svc *MockTaskService) {
-				svc.On("GetTasks", entities.TaskSearch{Limit: 100}).Return([]entities.Task{}, nil)
+				svc.On("GetTasks", entities.TaskSearch{Limit: 20}).Return([]entities.Task{}, nil)
 			},
 			wantStatus: http.StatusOK,
 			taskCount:  0,
 		},
 		{
-			name:        "filters by title and description query param",
+			name:        "filters by title and description query param and limit",
 			queryParams: "search=test&limit=10",
 			setupMock: func(svc *MockTaskService) {
 				svc.On("GetTasks", entities.TaskSearch{Search: "test", Limit: 10}).Return([]entities.Task{
