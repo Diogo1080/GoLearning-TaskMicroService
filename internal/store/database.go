@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"net/url"
 	"os"
 	"time"
 
@@ -18,18 +19,19 @@ func GetConnectionURL() string {
 	user := os.Getenv("DB_USER")
 	password := os.Getenv("DB_SECRET")
 	dbName := os.Getenv("DB_NAME")
-	fmt.Print(dbName)
 	sslMode := os.Getenv("DB_SSLMODE")
 
-	return fmt.Sprintf(
-		"postgres://%s:%s@%s:%s/%s?sslmode=%s",
-		user,
-		password,
-		host,
-		port,
-		dbName,
-		sslMode,
-	)
+	databaseURL := url.URL{
+		Scheme: "postgres",
+		User:   url.UserPassword(user, password),
+		Host:   host + ":" + port,
+		Path:   "/" + dbName,
+	}
+	query := databaseURL.Query()
+	query.Set("sslmode", sslMode)
+	databaseURL.RawQuery = query.Encode()
+
+	return databaseURL.String()
 }
 
 func Connect(databaseURL string) (*sql.DB, error) {

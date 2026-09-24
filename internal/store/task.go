@@ -3,12 +3,16 @@ package store
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"strconv"
 	"time"
 
 	entities "github.com/Diogo1080/GoLearning-TaskMicroService/internal/domain"
+	"github.com/lib/pq"
 )
+
+const taskColumns = "id, user_id, title, description, priority, completed, due_date"
 
 type SQLiteTaskRepository struct {
 	DB *sql.DB
@@ -27,7 +31,7 @@ func (r *SQLiteTaskRepository) CreateTask(ctx context.Context, task entities.Tas
 		task.UserID, task.Title, task.Description, task.Priority, task.Completed, dueDate).Scan(&task.ID)
 
 	if err != nil {
-		return entities.Task{}, err
+		return entities.Task{}, mapDatabaseError(err)
 	}
 
 	return task, nil
@@ -39,7 +43,7 @@ func (r *SQLiteTaskRepository) GetTasks(ctx context.Context, terms entities.Task
 	}
 
 	i := int(1)
-	query := "SELECT * FROM tasks "
+	query := "SELECT " + taskColumns + " FROM tasks "
 	args := []interface{}{}
 
 	query += "WHERE user_id = $" + fmt.Sprint(i) + " "
@@ -54,28 +58,40 @@ func (r *SQLiteTaskRepository) GetTasks(ctx context.Context, terms entities.Task
 
 	if terms.Priority != "" {
 		query += "AND priority = $" + fmt.Sprint(i) + " "
-		priority, _ := strconv.Atoi(terms.Priority)
+		priority, err := strconv.Atoi(terms.Priority)
+		if err != nil {
+			return nil, entities.ErrBadRequest
+		}
 		args = append(args, priority)
 		i++
 	}
 
 	if terms.Completed != "" {
 		query += "AND completed = $" + fmt.Sprint(i) + " "
-		completed, _ := strconv.ParseBool(terms.Completed)
+		completed, err := strconv.ParseBool(terms.Completed)
+		if err != nil {
+			return nil, entities.ErrBadRequest
+		}
 		args = append(args, completed)
 		i++
 	}
 
 	if terms.DueDateMax != "" {
 		query += "AND due_date < $" + fmt.Sprint(i) + " "
-		date, _ := time.Parse("2006-01-02", terms.DueDateMax)
+		date, err := time.Parse("2006-01-02", terms.DueDateMax)
+		if err != nil {
+			return nil, entities.ErrBadRequest
+		}
 		args = append(args, date)
 		i++
 	}
 
 	if terms.DueDateMin != "" {
 		query += "AND due_date > $" + fmt.Sprint(i) + " "
-		date, _ := time.Parse("2006-01-02", terms.DueDateMin)
+		date, err := time.Parse("2006-01-02", terms.DueDateMin)
+		if err != nil {
+			return nil, entities.ErrBadRequest
+		}
 		args = append(args, date)
 		i++
 	}
@@ -101,7 +117,7 @@ func (r *SQLiteTaskRepository) GetTasks(ctx context.Context, terms entities.Task
 
 	rows, err := r.DB.QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, err
+		return nil, mapDatabaseError(err)
 	}
 	defer rows.Close()
 
@@ -111,7 +127,7 @@ func (r *SQLiteTaskRepository) GetTasks(ctx context.Context, terms entities.Task
 		var dueDate sql.NullTime
 		err = rows.Scan(&task.ID, &task.UserID, &task.Title, &task.Description, &task.Priority, &task.Completed, &dueDate)
 		if err != nil {
-			return nil, err
+			return nil, mapDatabaseError(err)
 		}
 		if dueDate.Valid {
 			task.DueDate = dueDate.Time
@@ -119,35 +135,27 @@ func (r *SQLiteTaskRepository) GetTasks(ctx context.Context, terms entities.Task
 		tasks = append(tasks, task)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, err
+		return nil, mapDatabaseError(err)
 	}
 
 	return tasks, nil
 }
 
 func (r *SQLiteTaskRepository) GetTaskByID(ctx context.Context, id int, userID int) (entities.Task, error) {
-	result, err := r.DB.QueryContext(ctx, "SELECT * FROM tasks WHERE id = $1 AND user_id = $2", id, userID)
+	var task entities.Task
+	var dueDate sql.NullTime
+	err := r.DB.QueryRowContext(ctx, "SELECT "+taskColumns+" FROM tasks WHERE id = $1 AND user_id = $2", id, userID).
+		Scan(&task.ID, &task.UserID, &task.Title, &task.Description, &task.Priority, &task.Completed, &dueDate)
 
 	if err != nil {
-		return entities.Task{}, entities.ErrInternal
+		return entities.Task{}, mapDatabaseError(err)
 	}
 
-	defer result.Close()
-
-	if result.Next() {
-		var task entities.Task
-		var dueDate sql.NullTime
-		err := result.Scan(&task.ID, &task.UserID, &task.Title, &task.Description, &task.Priority, &task.Completed, &dueDate)
-		if err != nil {
-			return entities.Task{}, err
-		}
-		if dueDate.Valid {
-			task.DueDate = dueDate.Time
-		}
-		return task, nil
+	if dueDate.Valid {
+		task.DueDate = dueDate.Time
 	}
 
-	return entities.Task{}, entities.ErrNotFound
+	return task, nil
 }
 
 func (r *SQLiteTaskRepository) UpdateTask(ctx context.Context, taskUpdates entities.Task, taskID int, userID int) (entities.Task, error) {
@@ -159,10 +167,13 @@ func (r *SQLiteTaskRepository) UpdateTask(ctx context.Context, taskUpdates entit
 		taskUpdates.Title, taskUpdates.Description, taskUpdates.Priority, dueDate, taskID, userID)
 
 	if err != nil {
-		return entities.Task{}, err
+		return entities.Task{}, mapDatabaseError(err)
 	}
 
 	affected, err := result.RowsAffected()
+	if err != nil {
+		return entities.Task{}, mapDatabaseError(err)
+	}
 
 	if affected == int64(0) {
 		return entities.Task{}, entities.ErrNotFound
@@ -175,25 +186,46 @@ func (r *SQLiteTaskRepository) DeleteTask(ctx context.Context, id int, userID in
 	result, err := r.DB.ExecContext(ctx, "DELETE FROM tasks WHERE id = $1 AND user_id = $2", id, userID)
 
 	if err != nil {
-		return 0, err
+		return 0, mapDatabaseError(err)
 	}
 
-	if rows, _ := result.RowsAffected(); rows == 0 {
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return 0, mapDatabaseError(err)
+	}
+	if rows == 0 {
 		return 0, entities.ErrNotFound
 	}
 
-	return result.RowsAffected()
+	return rows, nil
 }
 
 func (r *SQLiteTaskRepository) MarkTaskAsDone(ctx context.Context, id int, userID int) (int64, error) {
 	result, err := r.DB.ExecContext(ctx, "UPDATE tasks SET completed = $1 WHERE id = $2 AND  user_id = $3", true, id, userID)
 	if err != nil {
-		return 0, err
+		return 0, mapDatabaseError(err)
 	}
 
-	if rows, _ := result.RowsAffected(); rows == 0 {
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return 0, mapDatabaseError(err)
+	}
+	if rows == 0 {
 		return 0, entities.ErrNotFound
 	}
 
-	return result.RowsAffected()
+	return rows, nil
+}
+
+func mapDatabaseError(err error) error {
+	if errors.Is(err, sql.ErrNoRows) {
+		return entities.ErrNotFound
+	}
+
+	var postgresError *pq.Error
+	if errors.As(err, &postgresError) && postgresError.Code == "23505" {
+		return entities.ErrConflict
+	}
+
+	return err
 }
