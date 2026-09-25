@@ -21,7 +21,7 @@
 ## Environment and integration prerequisites
 
 - Copy `.env.example` to a local `.env` and set `PORT`, `IDENTITY_SERVICE_ADDR`, and the `DB_*` variables. Never commit secrets or `.env` changes.
-- Check the actual environment variable consumed by the code when changing configuration: the current `main.go` lookup uses `IDENTITY-SERVICE-ADDR`, while `.env.example` uses `IDENTITY_SERVICE_ADDR`; keep this mismatch visible and fix it deliberately rather than silently adding another spelling.
+- Identity configuration is read from `IDENTITY_SERVICE_ADDR`; the hyphenated `IDENTITY-SERVICE-ADDR` spelling remains a compatibility fallback.
 - `godotenv.Load("../.env")` is relative to the process working directory. Verify the working directory or environment variables before treating missing configuration as an application bug.
 - Integration tests in `tests/integration` expect the task service at `localhost:8083` and the identity service at `localhost:8081`; both services must be running and seeded as required by their own repositories.
 - Test Compose requires the external Docker network `todo-test-network` and an already available identity service. Production Compose similarly requires `todo-network`; neither Compose file starts the identity service.
@@ -40,3 +40,17 @@
 - Add or update unit tests for handler/service behavior; use integration tests only when the change crosses the database, HTTP, or identity-service boundary.
 - For database changes, add ordered up/down migrations under `internal/store/migrations` and verify behavior against an empty database and the previous migration version.
 - Run `gofmt` and the narrowest relevant test command before broader validation. Inspect `go test ./...` failures for missing external-service prerequisites before changing production code.
+
+## Gin-specific guidance
+
+- Use `gin.New()` instead of `gin.Default()` and attach only the middleware needed for the service.
+- Keep handlers thin: parse input, call a service, marshal output; keep business logic in the service layer.
+- Define request and response structs per endpoint; do not reuse domain model structs as API DTOs.
+- Register middleware as factory functions and preserve the ordering of global and route-level middleware.
+- Abort middleware early with `c.AbortWithStatusJSON(...)` when authentication or validation fails; do not continue after aborting.
+- Use `c.Set(...)` and `c.MustGet(...)` for request-scoped values such as user or request identifiers.
+- Use `c.ShouldBindJSON`, `c.ShouldBindQuery`, and `c.ShouldBindUri` for request binding and validate business rules in the service layer.
+- Centralize HTTP error mapping through the existing mapper and avoid returning ad hoc JSON shapes in handlers.
+- Propagate request context through `c.Request.Context()` when calling downstream dependencies so cancellation and logging context remain intact.
+- Use Gin security defaults appropriate to production, including release mode and security headers, but keep the repo's existing middleware layout and route structure intact.
+- Unit tests should use `httptest.NewRecorder()` with `router.ServeHTTP(...)` and assert both the HTTP status and the JSON body for the real handler behavior.

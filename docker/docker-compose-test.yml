@@ -5,10 +5,10 @@ services:
       dockerfile: docker/Dockerfile
     container_name: task-service-test
     ports:
-      - "8083:8083"
+      - "9003:9003"
     environment:
       APP_ENV: test
-      PORT: 8083
+      PORT: 9003
       IDENTITY-SERVICE-ADDR: "identity-test-app:50052"
 
       DB_HOST: task-postgres-test
@@ -20,6 +20,12 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "--quiet", "http://127.0.0.1:9003/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     restart: unless-stopped
     networks:
       - todo-test-network

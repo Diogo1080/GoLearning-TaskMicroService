@@ -6,20 +6,24 @@ import (
 	"net/http"
 	"strings"
 
+	Identity "github.com/Diogo1080/GoLearning-IdentityMicroService/api/v1"
 	"github.com/Diogo1080/GoLearning-TaskMicroService/internal/domain"
-	identity "github.com/Diogo1080/GoLearning-TaskMicroService/internal/identity"
 	"github.com/Diogo1080/GoLearning-TaskMicroService/internal/logger"
 
 	"github.com/gin-gonic/gin"
 )
 
 type IdentityMiddlewareBuilder struct {
-	IdentityClient *identity.Client
+	IdentityClient TokenValidator
 	logger         *slog.Logger
 }
 
-func NewIdentityMiddlewareBuilder(client *identity.Client) *IdentityMiddlewareBuilder {
-	return &IdentityMiddlewareBuilder{IdentityClient: client, logger: logger.New().WithGroup("IdentityMiddleware")}
+type TokenValidator interface {
+	ValidateToken(ctx context.Context, token string) (*Identity.ValidateTokenResponse, error)
+}
+
+func NewIdentityMiddlewareBuilder(client TokenValidator, appEnv string) *IdentityMiddlewareBuilder {
+	return &IdentityMiddlewareBuilder{IdentityClient: client, logger: logger.New(appEnv).WithGroup("IdentityMiddleware")}
 }
 
 func (b *IdentityMiddlewareBuilder) Build() gin.HandlerFunc {
@@ -35,7 +39,7 @@ func (b *IdentityMiddlewareBuilder) Build() gin.HandlerFunc {
 			return
 		}
 
-		ctx := context.Background()
+		ctx := c.Request.Context()
 		resp, err := b.IdentityClient.ValidateToken(ctx, tokenStr)
 
 		if err != nil || resp.UserId == 0 {

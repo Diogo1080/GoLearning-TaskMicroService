@@ -5,37 +5,14 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
-	"net/url"
-	"os"
 	"time"
 
+	"github.com/XSAM/otelsql"
 	_ "github.com/lib/pq"
 )
 
-// GetConnectionURL builds the PostgreSQL connection string
-func GetConnectionURL() string {
-	host := os.Getenv("DB_HOST")
-	port := os.Getenv("DB_PORT")
-	user := os.Getenv("DB_USER")
-	password := os.Getenv("DB_SECRET")
-	dbName := os.Getenv("DB_NAME")
-	sslMode := os.Getenv("DB_SSLMODE")
-
-	databaseURL := url.URL{
-		Scheme: "postgres",
-		User:   url.UserPassword(user, password),
-		Host:   host + ":" + port,
-		Path:   "/" + dbName,
-	}
-	query := databaseURL.Query()
-	query.Set("sslmode", sslMode)
-	databaseURL.RawQuery = query.Encode()
-
-	return databaseURL.String()
-}
-
 func Connect(databaseURL string) (*sql.DB, error) {
-	db, err := sql.Open("postgres", databaseURL)
+	db, err := otelsql.Open("postgres", databaseURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database: %w", err)
 	}

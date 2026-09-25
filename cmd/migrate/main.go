@@ -3,16 +3,17 @@ package main
 import (
 	"log"
 
+	"github.com/Diogo1080/GoLearning-TaskMicroService/internal/config"
 	"github.com/Diogo1080/GoLearning-TaskMicroService/internal/store"
-	"github.com/joho/godotenv"
 )
 
 func main() {
-	if err := godotenv.Load(); err != nil {
-		log.Println("No .env file found, using environment variables")
+	cfg, err := config.Load(".env")
+	if err != nil {
+		log.Fatalf("Invalid configuration: %v", err)
 	}
 
-	db, err := store.Connect(store.GetConnectionURL())
+	db, err := store.Connect(cfg.DatabaseURL())
 	if err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)
 	}

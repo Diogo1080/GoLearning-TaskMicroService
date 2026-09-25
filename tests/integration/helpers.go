@@ -49,8 +49,8 @@ type UserResponse struct {
 }
 
 // Task service (under test) and Identity service (provides users/tokens).
-var taskBaseURL = "http://localhost:8083/api"
-var identityBaseURL = "http://localhost:8081/api"
+var taskBaseURL = "http://localhost:9003/api"
+var identityBaseURL = "http://localhost:9001/api"
 
 func getEnvOrDefault(key, fallback string) string {
 	if v := os.Getenv(key); v != "" {

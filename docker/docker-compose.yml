@@ -7,10 +7,25 @@ services:
       dockerfile: docker/Dockerfile
     container_name: task-service
     ports:
-      - "8085:8085"
+      - "${WEB_PORT:-9002}:9002"
+    environment:
+      PORT: 9002
+      IDENTITY-SERVICE-ADDR: ${IDENTITY_SERVICE_ADDR:-identity-service:50052}
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: ${DB_USER:-task}
+      DB_SECRET: ${DB_SECRET:-change-me}
+      DB_NAME: ${DB_NAME:-task}
+      DB_SSLMODE: ${DB_SSLMODE:-disable}
     depends_on:
       postgres:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "--quiet", "http://127.0.0.1:9002/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     restart: unless-stopped
     networks:
       - todo-network
@@ -19,7 +34,7 @@ services:
     image: postgres:15-alpine
     container_name: task-postgres
     ports:
-      - "${DB_PORT}:${DB_PORT}"
+      - "${DB_PORT:-5432}:5432"
     environment:
       - POSTGRES_USER=${DB_USER}
       - POSTGRES_PASSWORD=${DB_SECRET}

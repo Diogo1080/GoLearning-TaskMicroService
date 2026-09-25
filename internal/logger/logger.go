@@ -6,9 +6,8 @@ import (
 	"strings"
 )
 
-// New creates a configured slog logger based on APP_ENV
-func New() *slog.Logger {
-	env := os.Getenv("APP_ENV")
+// New creates a configured slog logger for the supplied application environment.
+func New(env string) *slog.Logger {
 	var handler slog.Handler
 
 	opts := &slog.HandlerOptions{

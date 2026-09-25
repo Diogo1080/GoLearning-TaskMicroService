@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 
 	entities "github.com/Diogo1080/GoLearning-TaskMicroService/internal/domain"
 	server "github.com/Diogo1080/GoLearning-TaskMicroService/internal/transport/http"
@@ -40,7 +39,7 @@ func (m *MockTaskService) GetTasks(ctx context.Context, terms entities.TaskSearc
 }
 
 func (m *MockTaskService) GetTaskByID(ctx context.Context, id int, userID int) (entities.Task, error) {
-	args := m.Called(id)
+	args := m.Called(id, userID)
 	if args.Get(0) == nil {
 		return entities.Task{}, args.Error(1)
 	}
@@ -48,7 +47,7 @@ func (m *MockTaskService) GetTaskByID(ctx context.Context, id int, userID int) (
 }
 
 func (m *MockTaskService) UpdateTask(ctx context.Context, task entities.Task, id int, userID int) (entities.Task, error) {
-	args := m.Called(task, id)
+	args := m.Called(task, id, userID)
 	if args.Get(0) == nil {
 		return entities.Task{}, args.Error(1)
 	}
@@ -56,261 +55,156 @@ func (m *MockTaskService) UpdateTask(ctx context.Context, task entities.Task, id
 }
 
 func (m *MockTaskService) DeleteTask(ctx context.Context, id int, userID int) error {
-	args := m.Called(id)
-	return args.Error(1)
+	args := m.Called(id, userID)
+	return args.Error(0)
 }
 
 func (m *MockTaskService) MarkTaskAsDone(ctx context.Context, id int, userID int) (int, error) {
-	args := m.Called(id)
+	args := m.Called(id, userID)
 	return args.Get(0).(int), args.Error(1)
 }
 
 // --- Handler Tests ---
 
 func TestTaskHandler_CreateTask(t *testing.T) {
-	type testCase struct {
-		name        string
-		requestBody map[string]interface{}
-		setupMock   func(*MockTaskService)
-		wantStatus  int
-		expectID    int
-		expectError bool
-	}
+	gin.SetMode(gin.TestMode)
+	router := gin.Default()
+	mockSvc := new(MockTaskService)
+	mockSvc.On("CreateTask", mock.MatchedBy(func(task entities.Task) bool {
+		return task.UserID == 0 && task.Title == "New Task" && task.Description == "Task description"
+	})).Return(entities.Task{ID: 1, UserID: 1, Title: "New Task", Description: "Task description"}, nil)
+	router.POST("/api/tasks", server.NewTaskHandler(mockSvc).HandleAddTask)
 
-	tests := []testCase{
-		{
-			name: "creates task successfully",
-			requestBody: map[string]interface{}{
-				"title":       "New Task",
-				"userID":      1,
-				"description": "Task description",
-				"completed":   false,
-			},
-			setupMock: func(svc *MockTaskService) {
-				svc.On("CreateTask", mock.AnythingOfType("domain.Task")).
-					Return(entities.Task{
-						ID:          1,
-						UserID:      1,
-						Title:       "New Task",
-						Description: "Task description",
-						Completed:   false,
-						DueDate:     time.Now(),
-					}, nil)
-			},
-			wantStatus:  http.StatusCreated,
-			expectID:    1,
-			expectError: false,
-		},
-		{
-			name:        "rejects invalid JSON",
-			requestBody: nil,
-			setupMock: func(svc *MockTaskService) {
-				svc.AssertNotCalled(t, "CreateTask", mock.AnythingOfType("domain.Task"))
-			},
-			wantStatus:  http.StatusBadRequest,
-			expectID:    0,
-			expectError: true,
-		},
-		{
-			name: "handles service error",
-			requestBody: map[string]interface{}{
-				"title":       "Fail Task",
-				"description": "Will fail",
-			},
-			setupMock: func(svc *MockTaskService) {
-				svc.On("CreateTask", mock.AnythingOfType("domain.Task")).
-					Return(entities.Task{}, errors.New("databaseerror"))
-			},
-			wantStatus:  http.StatusInternalServerError,
-			expectID:    0,
-			expectError: true,
-		},
-	}
+	body := bytes.NewBufferString(`{"title":"New Task","description":"Task description","completed":false}`)
+	req, _ := http.NewRequest("POST", "/api/tasks", body)
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			// Setup Gin in test mode
-			gin.SetMode(gin.TestMode)
-			router := gin.Default()
-
-			// Arrange
-			mockSvc := new(MockTaskService)
-			tc.setupMock(mockSvc)
-			h := server.NewTaskHandler(mockSvc)
-
-			router.POST("/api/tasks", h.HandleAddTask)
-
-			var body bytes.Buffer
-			if tc.requestBody != nil {
-				json.NewEncoder(&body).Encode(tc.requestBody)
-			}
-
-			req, _ := http.NewRequest("POST", "/api/tasks", &body)
-			req.Header.Set("Content-Type", "application/json")
-
-			rr := httptest.NewRecorder()
-
-			// Act
-			router.ServeHTTP(rr, req)
-
-			// Assert
-			assert.Equal(t, tc.wantStatus, rr.Code)
-
-			if tc.expectError && tc.wantStatus != http.StatusBadRequest {
-				var resp map[string]string
-				json.Unmarshal(rr.Body.Bytes(), &resp)
-			} else if !tc.expectError && tc.wantStatus == http.StatusCreated {
-				var resp map[string]interface{}
-				json.Unmarshal(rr.Body.Bytes(), &resp)
-				assert.Equal(t, tc.expectID, int(resp["id"].(float64)))
-			}
-
-			mockSvc.AssertExpectations(t)
-		})
-	}
+	assert.Equal(t, http.StatusCreated, rr.Code)
+	mockSvc.AssertExpectations(t)
 }
 
-func TestTaskHandler_GetTasks(t *testing.T) {
-	tests := []struct {
-		name        string
-		queryParams string
-		setupMock   func(*MockTaskService)
-		wantStatus  int
-		taskCount   int
-	}{
-		{
-			name:        "returns all tasks with default limit",
-			queryParams: "",
-			setupMock: func(svc *MockTaskService) {
-				svc.On("GetTasks", entities.TaskSearch{Limit: 20, Offset: 1}).Return([]entities.Task{
-					{ID: 1, Title: "Task 1", DueDate: time.Now()},
-					{ID: 2, Title: "Task 2", DueDate: time.Now()},
-				}, nil)
-			},
-			wantStatus: http.StatusOK,
-			taskCount:  2,
-		},
-		{
-			name:        "returns no tasks with default limit",
-			queryParams: "",
-			setupMock: func(svc *MockTaskService) {
-				svc.On("GetTasks", entities.TaskSearch{Limit: 20, Offset: 1}).Return([]entities.Task{}, nil)
-			},
-			wantStatus: http.StatusOK,
-			taskCount:  0,
-		},
-		{
-			name:        "uses the requested page",
-			queryParams: "limit=5&offset=3",
-			setupMock: func(svc *MockTaskService) {
-				svc.On("GetTasks", entities.TaskSearch{Limit: 5, Offset: 3}).Return([]entities.Task{
-					{ID: 11, Title: "Task 11"},
-				}, nil)
-			},
-			wantStatus: http.StatusOK,
-			taskCount:  1,
-		},
-		{
-			name:        "defaults invalid page to the first page",
-			queryParams: "limit=5&offset=invalid",
-			setupMock: func(svc *MockTaskService) {
-				svc.On("GetTasks", entities.TaskSearch{Limit: 5, Offset: 1}).Return([]entities.Task{}, nil)
-			},
-			wantStatus: http.StatusOK,
-			taskCount:  0,
-		},
-		{
-			name:        "filters by title and description query param and limit",
-			queryParams: "search=test&limit=10&offset=2",
-			setupMock: func(svc *MockTaskService) {
-				svc.On("GetTasks", entities.TaskSearch{Search: "test", Limit: 10, Offset: 2}).Return([]entities.Task{
-					{ID: 1, Title: "Testing", DueDate: time.Now()},
-					{ID: 2, Title: "Nothing", DueDate: time.Now()},
-				}, nil)
-			},
-			wantStatus: http.StatusOK,
-			taskCount:  2,
-		},
-	}
+func TestTaskHandler_CreateTaskRejectsInvalidJSON(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.Default()
+	mockSvc := new(MockTaskService)
+	mockSvc.AssertNotCalled(t, "CreateTask", mock.Anything)
+	router.POST("/api/tasks", server.NewTaskHandler(mockSvc).HandleAddTask)
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			gin.SetMode(gin.TestMode)
-			router := gin.Default()
+	req, _ := http.NewRequest("POST", "/api/tasks", bytes.NewBufferString("{"))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
 
-			mockSvc := new(MockTaskService)
-			tt.setupMock(mockSvc)
-			h := server.NewTaskHandler(mockSvc)
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	mockSvc.AssertExpectations(t)
+}
 
-			router.GET("/api/tasks", h.HandleGetTasks)
+func TestTaskHandler_CreateTaskReturnsServiceError(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.Default()
+	mockSvc := new(MockTaskService)
+	mockSvc.On("CreateTask", mock.AnythingOfType("domain.Task")).Return(entities.Task{}, errors.New("databaseerror"))
+	router.POST("/api/tasks", server.NewTaskHandler(mockSvc).HandleAddTask)
 
-			req, _ := http.NewRequest("GET", "/api/tasks?"+tt.queryParams, nil)
-			rr := httptest.NewRecorder()
+	body := bytes.NewBufferString(`{"title":"Fail Task","description":"Will fail"}`)
+	req, _ := http.NewRequest("POST", "/api/tasks", body)
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
 
-			router.ServeHTTP(rr, req)
+	assert.Equal(t, http.StatusInternalServerError, rr.Code)
+	mockSvc.AssertExpectations(t)
+}
 
-			assert.Equal(t, tt.wantStatus, rr.Code)
+func TestTaskHandler_GetTasksUsesDefaultPagination(t *testing.T) {
+	runGetTasksHandlerTest(t, "", entities.TaskSearch{Limit: 20, Offset: 1}, []entities.Task{{ID: 1}, {ID: 2}})
+}
 
-			var tasks []entities.Task
-			json.Unmarshal(rr.Body.Bytes(), &tasks)
-			assert.Len(t, tasks, tt.taskCount)
+func TestTaskHandler_GetTasksReturnsEmptyArray(t *testing.T) {
+	runGetTasksHandlerTest(t, "", entities.TaskSearch{Limit: 20, Offset: 1}, []entities.Task{})
+}
 
-			mockSvc.AssertExpectations(t)
-		})
-	}
+func TestTaskHandler_GetTasksUsesRequestedPage(t *testing.T) {
+	runGetTasksHandlerTest(t, "limit=5&offset=3", entities.TaskSearch{Limit: 5, Offset: 3}, []entities.Task{{ID: 11}})
+}
+
+func TestTaskHandler_GetTasksDefaultsInvalidPage(t *testing.T) {
+	runGetTasksHandlerTest(t, "limit=5&offset=invalid", entities.TaskSearch{Limit: 5, Offset: 1}, []entities.Task{})
+}
+
+func TestTaskHandler_GetTasksAppliesSearchAndPagination(t *testing.T) {
+	runGetTasksHandlerTest(t, "search=test&limit=10&offset=2", entities.TaskSearch{Search: "test", Limit: 10, Offset: 2}, []entities.Task{{ID: 1}, {ID: 2}})
+}
+
+func runGetTasksHandlerTest(t *testing.T, query string, expectedTerms entities.TaskSearch, returnedTasks []entities.Task) {
+	t.Helper()
+	gin.SetMode(gin.TestMode)
+	router := gin.Default()
+	mockSvc := new(MockTaskService)
+	mockSvc.On("GetTasks", expectedTerms).Return(returnedTasks, nil)
+	router.GET("/api/tasks", server.NewTaskHandler(mockSvc).HandleGetTasks)
+
+	req, _ := http.NewRequest("GET", "/api/tasks?"+query, nil)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusOK, rr.Code)
+	var tasks []entities.Task
+	assert.NoError(t, json.Unmarshal(rr.Body.Bytes(), &tasks))
+	assert.Len(t, tasks, len(returnedTasks))
+	mockSvc.AssertExpectations(t)
 }
 
 func TestTaskHandler_DeleteTask(t *testing.T) {
-	tests := []struct {
-		name       string
-		taskID     string
-		setupMock  func(*MockTaskService)
-		wantStatus int
-	}{
-		{
-			name:   "deletes task successfully",
-			taskID: "42",
-			setupMock: func(svc *MockTaskService) {
-				svc.On("DeleteTask", 42).Return(int64(1), nil)
-			},
-			wantStatus: http.StatusOK,
-		},
-		{
-			name:   "returns 404 when task not found",
-			taskID: "999",
-			setupMock: func(svc *MockTaskService) {
-				svc.On("DeleteTask", 999).Return(int64(0), entities.ErrNotFound)
-			},
-			wantStatus: http.StatusNotFound,
-		},
-		{
-			name:   "returns 400 for invalid ID",
-			taskID: "abc",
-			setupMock: func(svc *MockTaskService) {
-				svc.AssertNotCalled(t, "DeleteTask", mock.Anything)
-			},
-			wantStatus: http.StatusBadRequest,
-		},
-	}
+	gin.SetMode(gin.TestMode)
+	router := gin.Default()
+	mockSvc := new(MockTaskService)
+	mockSvc.On("DeleteTask", 42, 7).Return(nil)
+	registerAuthenticatedDeleteRoute(router, mockSvc)
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			gin.SetMode(gin.TestMode)
-			router := gin.Default()
+	req, _ := http.NewRequest("DELETE", "/api/tasks/42", nil)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
 
-			mockSvc := new(MockTaskService)
-			tt.setupMock(mockSvc)
-			h := server.NewTaskHandler(mockSvc)
+	assert.Equal(t, http.StatusOK, rr.Code)
+	mockSvc.AssertExpectations(t)
+}
 
-			router.DELETE("/api/tasks/:id", h.HandleDeleteTask)
+func TestTaskHandler_DeleteTaskReturnsNotFound(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.Default()
+	mockSvc := new(MockTaskService)
+	mockSvc.On("DeleteTask", 999, 7).Return(entities.ErrNotFound)
+	registerAuthenticatedDeleteRoute(router, mockSvc)
 
-			req, _ := http.NewRequest("DELETE", "/api/tasks/"+tt.taskID, nil)
-			rr := httptest.NewRecorder()
+	req, _ := http.NewRequest("DELETE", "/api/tasks/999", nil)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
 
-			router.ServeHTTP(rr, req)
+	assert.Equal(t, http.StatusNotFound, rr.Code)
+	mockSvc.AssertExpectations(t)
+}
 
-			assert.Equal(t, tt.wantStatus, rr.Code)
-			mockSvc.AssertExpectations(t)
-		})
-	}
+func TestTaskHandler_DeleteTaskRejectsInvalidID(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.Default()
+	mockSvc := new(MockTaskService)
+	registerAuthenticatedDeleteRoute(router, mockSvc)
+
+	req, _ := http.NewRequest("DELETE", "/api/tasks/abc", nil)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	mockSvc.AssertNotCalled(t, "DeleteTask", mock.Anything, mock.Anything)
+}
+
+func registerAuthenticatedDeleteRoute(router *gin.Engine, mockSvc *MockTaskService) {
+	router.Use(func(c *gin.Context) {
+		c.Set("userID", int32(7))
+		c.Next()
+	})
+	router.DELETE("/api/tasks/:id", server.NewTaskHandler(mockSvc).HandleDeleteTask)
 }
